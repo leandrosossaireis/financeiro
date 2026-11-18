@@ -1311,6 +1311,7 @@ const App = {
       search: ''
     },
     currentTab: 'overview',
+    billsFilter: 'unpaid',
     hideValues: false,
     editingId: null,
     deletingId: null,
@@ -1378,7 +1379,7 @@ const App = {
   switchTab(tabId) {
     this.state.currentTab = tabId;
 
-    ['overview', 'transactions', 'reports', 'budgets'].forEach(tab => {
+    ['overview', 'bills', 'transactions', 'reports', 'budgets'].forEach(tab => {
       const section = document.getElementById(`tab-${tab}`);
       if (section) section.classList.toggle('hidden', tab !== tabId);
 
@@ -1386,9 +1387,9 @@ const App = {
       const desktopBtn = document.querySelector(`[data-tab-btn="${tab}"]`);
       if (desktopBtn) {
         if (tab === tabId) {
-          desktopBtn.className = 'px-3 py-1.5 rounded-lg transition-colors nav-tab-active bg-white dark:bg-slate-900 shadow-sm text-blue-600 dark:text-blue-400 font-bold';
+          desktopBtn.className = 'px-3 py-1.5 rounded-lg transition-colors nav-tab-active bg-white dark:bg-slate-900 shadow-sm text-blue-600 dark:text-blue-400 font-bold flex items-center gap-1.5';
         } else {
-          desktopBtn.className = 'px-3 py-1.5 rounded-lg hover:text-slate-900 dark:hover:text-white transition-colors';
+          desktopBtn.className = 'px-3 py-1.5 rounded-lg hover:text-slate-900 dark:hover:text-white transition-colors flex items-center gap-1.5';
         }
       }
 
@@ -1396,14 +1397,16 @@ const App = {
       const bottomBtn = document.querySelector(`[data-bottom-tab="${tab}"]`);
       if (bottomBtn) {
         if (tab === tabId) {
-          bottomBtn.className = 'flex flex-col items-center justify-center flex-1 h-full bottom-tab-active text-blue-600 dark:text-blue-400 font-bold';
+          bottomBtn.className = 'flex flex-col items-center justify-center flex-1 h-full bottom-tab-active text-blue-600 dark:text-blue-400 font-bold relative';
         } else {
-          bottomBtn.className = 'flex flex-col items-center justify-center flex-1 h-full text-slate-400 dark:text-slate-500 hover:text-slate-700';
+          bottomBtn.className = 'flex flex-col items-center justify-center flex-1 h-full text-slate-400 dark:text-slate-500 hover:text-slate-700 relative';
         }
       }
     });
 
-    if (tabId === 'reports') {
+    if (tabId === 'bills') {
+      this.renderBills();
+    } else if (tabId === 'reports') {
       const filtered = this.getFilteredTransactions();
       ChartService.renderCategoryChart(filtered);
       ChartService.renderHistoryChart(this.state.transactions, this.state.filters.month);
@@ -1643,6 +1646,7 @@ const App = {
     this.renderMobileList(filteredTxs);
     this.renderRecentOverviewList(filteredTxs);
     this.renderBudgetsHeroProgress(filteredTxs);
+    this.renderBills();
 
     if (this.state.currentTab === 'reports') {
       ChartService.renderCategoryChart(filteredTxs);
@@ -1650,6 +1654,8 @@ const App = {
       this.renderAnalytics(filteredTxs);
     } else if (this.state.currentTab === 'budgets') {
       this.renderBudgets();
+    } else if (this.state.currentTab === 'bills') {
+      this.renderBills();
     }
   },
 
@@ -1904,6 +1910,282 @@ const App = {
 
     spentLabel.textContent = `Gasto: ${this.formatDisplayValue(totalExpense)}`;
     limitLabel.textContent = `Teto: ${this.formatDisplayValue(totalLimit)}`;
+  },
+
+  // =========================================================================
+  // GESTÃO DE CONTAS A PAGAR & VENCIMENTOS (O que já pagou e o que falta)
+  // =========================================================================
+
+  setBillsFilter(filter) {
+    this.state.billsFilter = filter;
+    const chips = ['unpaid', 'overdue', 'paid', 'all'];
+    const colors = {
+      unpaid: 'bg-amber-600 text-white',
+      overdue: 'bg-rose-600 text-white',
+      paid: 'bg-emerald-600 text-white',
+      all: 'bg-blue-600 text-white'
+    };
+    chips.forEach(c => {
+      const btn = document.querySelector(`[data-bills-chip="${c}"]`);
+      if (btn) {
+        if (c === filter) {
+          btn.className = `px-3 py-1.5 rounded-full font-bold whitespace-nowrap shadow-sm ${colors[c]}`;
+        } else {
+          btn.className = 'px-3 py-1.5 rounded-full font-bold bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-200 whitespace-nowrap';
+        }
+      }
+    });
+
+    const titles = {
+      unpaid: 'Contas que faltam pagar',
+      overdue: 'Contas atrasadas / vencidas',
+      paid: 'Contas já pagas neste mês',
+      all: 'Todas as contas do mês'
+    };
+    const titleEl = document.getElementById('bills-filter-title');
+    if (titleEl) titleEl.textContent = titles[filter] || 'Contas Pessoais';
+
+    this.renderBills();
+  },
+
+  renderBills() {
+    const month = this.state.filters.month;
+    const today = new Date().toISOString().split('T')[0];
+
+    const bills = this.state.transactions.filter(t => t.type === 'expense' && t.date && t.date.startsWith(month));
+
+    const paidBills = bills.filter(t => t.status === 'paid');
+    const unpaidBills = bills.filter(t => t.status === 'pending');
+    const overdueBills = unpaidBills.filter(t => t.date < today);
+
+    const totalPaid = paidBills.reduce((acc, cur) => acc + Number(cur.amount), 0);
+    const totalUnpaid = unpaidBills.reduce((acc, cur) => acc + Number(cur.amount), 0);
+    const totalOverdue = overdueBills.reduce((acc, cur) => acc + Number(cur.amount), 0);
+    const totalAll = totalPaid + totalUnpaid;
+
+    // Badges de notificação
+    const unpaidCount = unpaidBills.length;
+    const badgeDesktop = document.getElementById('badge-desktop-bills');
+    const badgeBottom = document.getElementById('badge-bottom-bills');
+    const badgeQuick = document.getElementById('badge-quick-bills');
+
+    [badgeDesktop, badgeBottom, badgeQuick].forEach(badge => {
+      if (!badge) return;
+      if (unpaidCount > 0) {
+        badge.textContent = unpaidCount;
+        badge.classList.remove('hidden');
+      } else {
+        badge.classList.add('hidden');
+      }
+    });
+
+    // Painel na Visão Geral (Overview)
+    const ovText = document.getElementById('overview-bills-progress-text');
+    const ovPct = document.getElementById('overview-bills-progress-pct');
+    const ovBar = document.getElementById('overview-bills-progress-bar');
+    const ovUnpaid = document.getElementById('overview-bills-unpaid');
+    const ovUnpaidCount = document.getElementById('overview-bills-unpaid-count');
+    const ovPaid = document.getElementById('overview-bills-paid');
+    const ovPaidCount = document.getElementById('overview-bills-paid-count');
+    const ovOverdueBox = document.getElementById('overview-bills-overdue-box');
+    const ovOverdue = document.getElementById('overview-bills-overdue');
+    const ovOverdueCount = document.getElementById('overview-bills-overdue-count');
+    const ovUpcoming = document.getElementById('overview-upcoming-bills');
+
+    const totalCount = bills.length;
+    const pct = totalCount > 0 ? (paidBills.length / totalCount) * 100 : 0;
+
+    if (ovText) ovText.textContent = `${paidBills.length} de ${totalCount} contas pagas`;
+    if (ovPct) ovPct.textContent = `${Math.round(pct)}% pago`;
+    if (ovBar) ovBar.style.width = `${pct}%`;
+
+    if (ovUnpaid) ovUnpaid.textContent = this.formatDisplayValue(totalUnpaid);
+    if (ovUnpaidCount) ovUnpaidCount.textContent = `${unpaidBills.length} contas pendentes`;
+
+    if (ovPaid) ovPaid.textContent = this.formatDisplayValue(totalPaid);
+    if (ovPaidCount) ovPaidCount.textContent = `${paidBills.length} contas quitadas`;
+
+    if (ovOverdueBox) {
+      if (overdueBills.length > 0) {
+        ovOverdueBox.classList.remove('hidden');
+        if (ovOverdue) ovOverdue.textContent = this.formatDisplayValue(totalOverdue);
+        if (ovOverdueCount) ovOverdueCount.textContent = `${overdueBills.length} ${overdueBills.length === 1 ? 'conta vencida' : 'contas vencidas'}`;
+      } else {
+        ovOverdueBox.classList.add('hidden');
+      }
+    }
+
+    if (ovUpcoming) {
+      if (unpaidBills.length === 0) {
+        ovUpcoming.innerHTML = `
+          <div class="py-2.5 px-3 rounded-xl bg-emerald-50/70 dark:bg-emerald-950/30 text-emerald-700 dark:text-emerald-300 text-xs flex items-center gap-2">
+            <svg class="w-4 h-4 text-emerald-500 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg>
+            <span>Tudo pago! Todas as contas deste período já foram quitadas.</span>
+          </div>
+        `;
+      } else {
+        const sortedUnpaid = [...unpaidBills].sort((a, b) => new Date(a.date) - new Date(b.date)).slice(0, 3);
+        ovUpcoming.innerHTML = sortedUnpaid.map(t => {
+          const isOverdue = t.date < today;
+          const isToday = t.date === today;
+          let dueLabel = Utils.formatDateBR(t.date);
+          let badgeClass = 'text-slate-500 bg-slate-100 dark:bg-slate-800';
+
+          if (isOverdue) {
+            dueLabel = 'Vencida!';
+            badgeClass = 'text-rose-700 bg-rose-100 dark:bg-rose-950/60 dark:text-rose-300 font-bold';
+          } else if (isToday) {
+            dueLabel = 'Vence Hoje!';
+            badgeClass = 'text-amber-800 bg-amber-100 dark:bg-amber-950/60 dark:text-amber-300 font-bold';
+          }
+
+          return `
+            <div class="p-2.5 rounded-xl border border-slate-100 dark:border-slate-800/80 bg-slate-50/50 dark:bg-slate-800/30 flex items-center justify-between gap-2 text-xs">
+              <div class="flex-1 min-w-0">
+                <div class="font-bold text-slate-800 dark:text-slate-200 truncate">${Utils.escapeHtml(t.description)}</div>
+                <div class="flex items-center gap-1.5 mt-0.5">
+                  <span class="px-1.5 py-0.2 rounded text-[10px] ${badgeClass}">${dueLabel}</span>
+                  <span class="text-[10px] text-slate-400">${Utils.escapeHtml(t.category)}</span>
+                </div>
+              </div>
+              <div class="text-right flex items-center gap-2 flex-shrink-0">
+                <span class="font-bold text-rose-600 dark:text-rose-400">${this.formatDisplayValue(t.amount)}</span>
+                <button type="button" onclick="App.payBill('${t.id}')" title="Marcar como Paga" class="px-2.5 py-1 rounded-lg text-xs font-bold bg-emerald-600 hover:bg-emerald-700 text-white shadow-sm active:scale-95 transition-all">
+                  Pagar
+                </button>
+              </div>
+            </div>
+          `;
+        }).join('');
+      }
+    }
+
+    // Totais na tela de Contas (tab-bills)
+    const elTotUnpaid = document.getElementById('bills-total-unpaid');
+    const elCntUnpaid = document.getElementById('bills-count-unpaid');
+    const elTotPaid = document.getElementById('bills-total-paid');
+    const elCntPaid = document.getElementById('bills-count-paid');
+    const elTotOver = document.getElementById('bills-total-overdue');
+    const elCntOver = document.getElementById('bills-count-overdue');
+    const elTotAll = document.getElementById('bills-total-all');
+    const elCntAll = document.getElementById('bills-count-all');
+
+    if (elTotUnpaid) elTotUnpaid.textContent = this.formatDisplayValue(totalUnpaid);
+    if (elCntUnpaid) elCntUnpaid.textContent = `${unpaidBills.length} contas a vencer`;
+
+    if (elTotPaid) elTotPaid.textContent = this.formatDisplayValue(totalPaid);
+    if (elCntPaid) elCntPaid.textContent = `${paidBills.length} contas quitadas`;
+
+    if (elTotOver) elTotOver.textContent = this.formatDisplayValue(totalOverdue);
+    if (elCntOver) elCntOver.textContent = `${overdueBills.length} contas atrasadas`;
+
+    if (elTotAll) elTotAll.textContent = this.formatDisplayValue(totalAll);
+    if (elCntAll) elCntAll.textContent = `${bills.length} contas no total`;
+
+    // Lista Filtrada de Contas
+    const listContainer = document.getElementById('bills-items-list');
+    const emptyState = document.getElementById('bills-empty-state');
+    if (!listContainer) return;
+
+    let displayList = [];
+    if (this.state.billsFilter === 'unpaid') {
+      displayList = [...unpaidBills].sort((a, b) => new Date(a.date) - new Date(b.date));
+    } else if (this.state.billsFilter === 'overdue') {
+      displayList = [...overdueBills].sort((a, b) => new Date(a.date) - new Date(b.date));
+    } else if (this.state.billsFilter === 'paid') {
+      displayList = [...paidBills].sort((a, b) => new Date(b.date) - new Date(a.date));
+    } else {
+      displayList = [...bills].sort((a, b) => new Date(a.date) - new Date(b.date));
+    }
+
+    if (displayList.length === 0) {
+      listContainer.innerHTML = '';
+      emptyState?.classList.remove('hidden');
+      return;
+    }
+
+    emptyState?.classList.add('hidden');
+
+    listContainer.innerHTML = displayList.map(t => {
+      const isPaid = t.status === 'paid';
+      const isOverdue = !isPaid && t.date < today;
+      const isToday = !isPaid && t.date === today;
+      const catObj = CATEGORIES.find(c => c.name.toLowerCase() === (t.category || '').toLowerCase());
+      const catColor = catObj ? catObj.color : '#64748b';
+
+      let dueText = '';
+      let badgeStyle = '';
+
+      if (isPaid) {
+        dueText = `✓ Paga (${Utils.formatDateBR(t.date)})`;
+        badgeStyle = 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300';
+      } else if (isOverdue) {
+        const diffDays = Math.max(1, Math.floor((new Date(today) - new Date(t.date)) / (1000 * 60 * 60 * 24)));
+        dueText = `🚨 Atrasada há ${diffDays} dia(s)`;
+        badgeStyle = 'bg-rose-100 text-rose-800 dark:bg-rose-950/60 dark:text-rose-300 font-bold status-pulse';
+      } else if (isToday) {
+        dueText = '⏰ Vence Hoje!';
+        badgeStyle = 'bg-amber-100 text-amber-800 dark:bg-amber-950/60 dark:text-amber-300 font-bold status-pulse';
+      } else {
+        const diffDays = Math.floor((new Date(t.date) - new Date(today)) / (1000 * 60 * 60 * 24));
+        dueText = `⏳ Vence em ${diffDays} dia(s) (${Utils.formatDateBR(t.date)})`;
+        badgeStyle = 'bg-blue-50 text-blue-800 dark:bg-blue-950/60 dark:text-blue-300';
+      }
+
+      const actionButton = !isPaid
+        ? `<button type="button" onclick="App.payBill('${t.id}')" class="px-3.5 py-1.5 rounded-xl text-xs font-bold bg-emerald-600 hover:bg-emerald-700 active:bg-emerald-800 text-white shadow-sm active:scale-95 transition-all flex items-center gap-1">
+            <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M5 13l4 4L19 7"/></svg>
+            Pagar
+           </button>`
+        : `<button type="button" onclick="App.toggleStatus('${t.id}')" title="Reabrir conta como pendente" class="px-2.5 py-1 rounded-xl text-xs font-medium text-slate-500 hover:text-amber-600 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors">
+            Desfazer
+           </button>`;
+
+      return `
+        <div class="p-3.5 sm:p-4 flex items-center justify-between gap-3 active:bg-slate-50 dark:active:bg-slate-800/40 transition-colors">
+          <div class="flex items-center gap-3 flex-1 min-w-0">
+            <div class="w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0 text-white font-bold text-xs shadow-sm" style="background-color: ${catColor}">
+              ${(t.category || 'O').substring(0, 2).toUpperCase()}
+            </div>
+            <div class="flex-1 min-w-0">
+              <div class="font-bold text-slate-900 dark:text-slate-100 text-xs sm:text-sm truncate">
+                ${Utils.escapeHtml(t.description)}
+              </div>
+              <div class="flex flex-wrap items-center gap-1.5 mt-1">
+                <span class="px-2 py-0.5 rounded-full text-[10px] font-semibold ${badgeStyle}">
+                  ${dueText}
+                </span>
+                <span class="text-[10px] text-slate-400">
+                  ${Utils.escapeHtml(t.category)} • ${Utils.escapeHtml(t.account || 'Conta Corrente')}
+                </span>
+              </div>
+            </div>
+          </div>
+
+          <div class="text-right flex items-center gap-3 flex-shrink-0">
+            <div class="text-xs sm:text-sm font-extrabold ${isPaid ? 'text-slate-500 line-through' : 'text-rose-600 dark:text-rose-400'}">
+              ${this.formatDisplayValue(t.amount)}
+            </div>
+            ${actionButton}
+            <div class="flex items-center">
+              <button type="button" onclick="App.openEditModal('${t.id}')" class="p-1 text-slate-400 hover:text-blue-600">
+                <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z"/></svg>
+              </button>
+            </div>
+          </div>
+        </div>
+      `;
+    }).join('');
+  },
+
+  payBill(id) {
+    const tx = this.state.transactions.find(t => t.id === id);
+    if (!tx) return;
+
+    tx.status = 'paid';
+    tx.updatedAt = Date.now();
+    this.saveAndSync();
+    Toast.show(`Conta "${tx.description}" marcada como PAGA! 🎉`, 'success', 3000);
   },
 
   // Aba de Orçamentos e Metas

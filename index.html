@@ -158,6 +158,10 @@
           <button type="button" onclick="App.switchTab('overview')" data-tab-btn="overview" class="px-3 py-1.5 rounded-lg transition-colors nav-tab-active bg-white dark:bg-slate-900 shadow-sm text-blue-600 dark:text-blue-400">
             Visão Geral
           </button>
+          <button type="button" onclick="App.switchTab('bills')" data-tab-btn="bills" class="px-3 py-1.5 rounded-lg hover:text-slate-900 dark:hover:text-white transition-colors flex items-center gap-1.5">
+            <span>Contas a Pagar</span>
+            <span id="badge-desktop-bills" class="hidden px-1.5 py-0.5 rounded-full text-[10px] bg-rose-500 text-white font-bold">0</span>
+          </button>
           <button type="button" onclick="App.switchTab('transactions')" data-tab-btn="transactions" class="px-3 py-1.5 rounded-lg hover:text-slate-900 dark:hover:text-white transition-colors">
             Extrato
           </button>
@@ -165,7 +169,7 @@
             Relatórios
           </button>
           <button type="button" onclick="App.switchTab('budgets')" data-tab-btn="budgets" class="px-3 py-1.5 rounded-lg hover:text-slate-900 dark:hover:text-white transition-colors">
-            Metas & Limites
+            Metas
           </button>
         </nav>
 
@@ -361,11 +365,12 @@
             <span class="text-[10px] font-bold">- Despesa</span>
           </button>
 
-          <button type="button" onclick="App.switchTab('budgets')" class="flex flex-col items-center justify-center p-2.5 rounded-xl bg-blue-50 dark:bg-blue-950/40 text-blue-700 dark:text-blue-300 border border-blue-200 dark:border-blue-800/60 active:scale-95 transition-all text-center">
-            <div class="w-7 h-7 rounded-full bg-blue-100 dark:bg-blue-900 flex items-center justify-center mb-1">
-              <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10"/></svg>
+          <button type="button" onclick="App.switchTab('bills')" class="flex flex-col items-center justify-center p-2.5 rounded-xl bg-amber-50 dark:bg-amber-950/40 text-amber-700 dark:text-amber-300 border border-amber-200 dark:border-amber-800/60 active:scale-95 transition-all text-center relative">
+            <div class="w-7 h-7 rounded-full bg-amber-100 dark:bg-amber-900 flex items-center justify-center mb-1">
+              <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4"/></svg>
             </div>
-            <span class="text-[10px] font-bold">Metas</span>
+            <span class="text-[10px] font-bold">Contas</span>
+            <span id="badge-quick-bills" class="hidden absolute top-1 right-2 w-2 h-2 rounded-full bg-rose-500"></span>
           </button>
 
           <button type="button" onclick="App.openSyncModal()" class="flex flex-col items-center justify-center p-2.5 rounded-xl bg-purple-50 dark:bg-purple-950/40 text-purple-700 dark:text-purple-300 border border-purple-200 dark:border-purple-800/60 active:scale-95 transition-all text-center">
@@ -374,6 +379,67 @@
             </div>
             <span class="text-[10px] font-bold">Nuvem</span>
           </button>
+        </div>
+
+        <!-- PAINEL DE CONTAS DO MÊS: O QUE JÁ PAGOU E O QUE FALTA PAGAR -->
+        <div class="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200/90 dark:border-slate-800 shadow-sm p-4 sm:p-5 space-y-3.5">
+          <div class="flex items-center justify-between">
+            <div class="flex items-center gap-2">
+              <div class="w-8 h-8 rounded-xl bg-amber-100 dark:bg-amber-950/60 text-amber-600 dark:text-amber-400 flex items-center justify-center">
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4"/></svg>
+              </div>
+              <div>
+                <h3 class="text-sm font-bold text-slate-900 dark:text-white">Contas Pessoais do Mês</h3>
+                <p class="text-[11px] text-slate-400">Controle de quitação e vencimentos</p>
+              </div>
+            </div>
+            <button type="button" onclick="App.switchTab('bills')" class="text-xs font-semibold text-blue-600 dark:text-blue-400 hover:underline">
+              Gerenciar Contas →
+            </button>
+          </div>
+
+          <!-- Barra de Progresso de Quitação das Contas -->
+          <div>
+            <div class="flex items-center justify-between text-xs font-medium mb-1.5">
+              <span id="overview-bills-progress-text" class="text-slate-600 dark:text-slate-300">0 de 0 contas pagas</span>
+              <span id="overview-bills-progress-pct" class="font-bold text-emerald-600 dark:text-emerald-400">0% pago</span>
+            </div>
+            <div class="w-full bg-slate-100 dark:bg-slate-800 rounded-full h-2.5 overflow-hidden">
+              <div id="overview-bills-progress-bar" class="h-full bg-emerald-500 rounded-full transition-all duration-500" style="width: 0%"></div>
+            </div>
+          </div>
+
+          <!-- Cards Rápidos: Falta Pagar vs. Já Pago -->
+          <div class="grid grid-cols-2 sm:grid-cols-3 gap-2.5 pt-1">
+            <div class="p-3 rounded-xl bg-amber-50/70 dark:bg-amber-950/30 border border-amber-200/80 dark:border-amber-900/40">
+              <span class="text-[10px] font-semibold uppercase tracking-wider text-amber-700 dark:text-amber-400">Falta Pagar</span>
+              <div id="overview-bills-unpaid" class="text-base sm:text-lg font-bold text-amber-700 dark:text-amber-300 mt-0.5 data-value">R$ 0,00</div>
+              <span id="overview-bills-unpaid-count" class="text-[10px] text-amber-600 dark:text-amber-400">0 contas pendentes</span>
+            </div>
+
+            <div class="p-3 rounded-xl bg-emerald-50/70 dark:bg-emerald-950/30 border border-emerald-200/80 dark:border-emerald-900/40">
+              <span class="text-[10px] font-semibold uppercase tracking-wider text-emerald-700 dark:text-emerald-400">Já Pago</span>
+              <div id="overview-bills-paid" class="text-base sm:text-lg font-bold text-emerald-700 dark:text-emerald-300 mt-0.5 data-value">R$ 0,00</div>
+              <span id="overview-bills-paid-count" class="text-[10px] text-emerald-600 dark:text-emerald-400">0 contas quitadas</span>
+            </div>
+
+            <div id="overview-bills-overdue-box" class="col-span-2 sm:col-span-1 p-3 rounded-xl bg-rose-50/70 dark:bg-rose-950/30 border border-rose-200/80 dark:border-rose-900/40 hidden">
+              <span class="text-[10px] font-semibold uppercase tracking-wider text-rose-700 dark:text-rose-400 flex items-center gap-1">
+                <span class="w-1.5 h-1.5 rounded-full bg-rose-500 status-pulse"></span>
+                Atrasadas
+              </span>
+              <div id="overview-bills-overdue" class="text-base sm:text-lg font-bold text-rose-700 dark:text-rose-300 mt-0.5 data-value">R$ 0,00</div>
+              <span id="overview-bills-overdue-count" class="text-[10px] text-rose-600 dark:text-rose-400">0 contas vencidas</span>
+            </div>
+          </div>
+
+          <!-- Próximas contas que faltam pagar -->
+          <div class="pt-2 border-t border-slate-100 dark:border-slate-800">
+            <h4 class="text-xs font-semibold text-slate-500 dark:text-slate-400 mb-2">Próximos Vencimentos</h4>
+            <div id="overview-upcoming-bills" class="space-y-2">
+              <!-- Renderizado via JS -->
+            </div>
+          </div>
         </div>
 
         <!-- ÚLTIMOS LANÇAMENTOS DO MÊS -->
@@ -386,6 +452,113 @@
           </div>
           <div id="recent-transactions-list" class="divide-y divide-slate-100 dark:divide-slate-800/60">
             <!-- Renderizado dinamicamente via JS -->
+          </div>
+        </div>
+
+      </section>
+
+      <!-- ====================================================================
+           NOVA ABA: CONTAS PESSOAIS & VENCIMENTOS (O que já pagou e o que falta)
+           ==================================================================== -->
+      <section id="tab-bills" class="space-y-4 hidden animate-fade-in">
+        
+        <!-- RESUMO DE CONTAS DO MÊS -->
+        <div class="grid grid-cols-2 sm:grid-cols-4 gap-2.5 sm:gap-3">
+          
+          <!-- Falta Pagar -->
+          <div class="bg-white dark:bg-slate-900 rounded-2xl p-3.5 sm:p-4 border border-amber-200 dark:border-amber-900/50 shadow-sm flex flex-col justify-between">
+            <div class="flex items-center justify-between text-xs font-semibold text-amber-700 dark:text-amber-400">
+              <span>Falta Pagar</span>
+              <span class="w-2 h-2 rounded-full bg-amber-500"></span>
+            </div>
+            <div class="mt-2">
+              <div id="bills-total-unpaid" class="text-lg sm:text-2xl font-extrabold text-amber-600 dark:text-amber-400 data-value">R$ 0,00</div>
+              <p id="bills-count-unpaid" class="text-[11px] text-slate-400 mt-0.5">0 contas a vencer</p>
+            </div>
+          </div>
+
+          <!-- Já Pago -->
+          <div class="bg-white dark:bg-slate-900 rounded-2xl p-3.5 sm:p-4 border border-emerald-200 dark:border-emerald-900/50 shadow-sm flex flex-col justify-between">
+            <div class="flex items-center justify-between text-xs font-semibold text-emerald-700 dark:text-emerald-400">
+              <span>Já Pago</span>
+              <span class="w-2 h-2 rounded-full bg-emerald-500"></span>
+            </div>
+            <div class="mt-2">
+              <div id="bills-total-paid" class="text-lg sm:text-2xl font-extrabold text-emerald-600 dark:text-emerald-400 data-value">R$ 0,00</div>
+              <p id="bills-count-paid" class="text-[11px] text-slate-400 mt-0.5">0 contas quitadas</p>
+            </div>
+          </div>
+
+          <!-- Atrasadas -->
+          <div class="bg-white dark:bg-slate-900 rounded-2xl p-3.5 sm:p-4 border border-rose-200 dark:border-rose-900/50 shadow-sm flex flex-col justify-between">
+            <div class="flex items-center justify-between text-xs font-semibold text-rose-700 dark:text-rose-400">
+              <span>Vencidas</span>
+              <span class="w-2 h-2 rounded-full bg-rose-500 status-pulse"></span>
+            </div>
+            <div class="mt-2">
+              <div id="bills-total-overdue" class="text-lg sm:text-2xl font-extrabold text-rose-600 dark:text-rose-400 data-value">R$ 0,00</div>
+              <p id="bills-count-overdue" class="text-[11px] text-slate-400 mt-0.5">0 atrasadas</p>
+            </div>
+          </div>
+
+          <!-- Total de Contas -->
+          <div class="bg-white dark:bg-slate-900 rounded-2xl p-3.5 sm:p-4 border border-slate-200/90 dark:border-slate-800 shadow-sm flex flex-col justify-between">
+            <div class="flex items-center justify-between text-xs font-semibold text-slate-700 dark:text-slate-300">
+              <span>Total Contas</span>
+              <span class="w-2 h-2 rounded-full bg-blue-500"></span>
+            </div>
+            <div class="mt-2">
+              <div id="bills-total-all" class="text-lg sm:text-2xl font-extrabold text-slate-900 dark:text-white data-value">R$ 0,00</div>
+              <p id="bills-count-all" class="text-[11px] text-slate-400 mt-0.5">0 contas no mês</p>
+            </div>
+          </div>
+
+        </div>
+
+        <!-- FILTROS DE CONTAS POR STATUS -->
+        <div class="bg-white dark:bg-slate-900 rounded-2xl p-3 border border-slate-200/90 dark:border-slate-800 shadow-sm flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+          <div class="flex items-center gap-1.5 overflow-x-auto pb-1 sm:pb-0 text-xs">
+            <button type="button" onclick="App.setBillsFilter('unpaid')" data-bills-chip="unpaid" class="px-3 py-1.5 rounded-full font-bold bg-amber-600 text-white whitespace-nowrap shadow-sm">
+              🔴 Falta Pagar
+            </button>
+            <button type="button" onclick="App.setBillsFilter('overdue')" data-bills-chip="overdue" class="px-3 py-1.5 rounded-full font-bold bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-200 whitespace-nowrap">
+              ⚠️ Atrasadas
+            </button>
+            <button type="button" onclick="App.setBillsFilter('paid')" data-bills-chip="paid" class="px-3 py-1.5 rounded-full font-bold bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-200 whitespace-nowrap">
+              🟢 Já Pagas
+            </button>
+            <button type="button" onclick="App.setBillsFilter('all')" data-bills-chip="all" class="px-3 py-1.5 rounded-full font-bold bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-200 whitespace-nowrap">
+              Todas as Contas
+            </button>
+          </div>
+
+          <button type="button" onclick="App.openTransactionModalWithType('expense')" class="inline-flex items-center gap-1 px-3 py-1.5 rounded-xl text-xs font-semibold text-white bg-blue-600 hover:bg-blue-700 active:bg-blue-800 shadow-sm self-start sm:self-auto">
+            <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M12 4v16m8-8H4"/></svg>
+            Nova Conta
+          </button>
+        </div>
+
+        <!-- LISTA DE CONTAS (Mobile e Desktop unificado e super limpo) -->
+        <div class="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200/90 dark:border-slate-800 shadow-sm overflow-hidden">
+          <div class="px-4 py-3 border-b border-slate-200/80 dark:border-slate-800 flex items-center justify-between">
+            <span id="bills-filter-title" class="text-xs sm:text-sm font-bold text-slate-900 dark:text-white uppercase tracking-wider">
+              Contas que faltam pagar
+            </span>
+            <span class="text-[11px] text-slate-400">
+              Dica: clique em "Pagar" para quitar
+            </span>
+          </div>
+
+          <div id="bills-items-list" class="divide-y divide-slate-100 dark:divide-slate-800/70">
+            <!-- Renderizado dinamicamente via JS -->
+          </div>
+
+          <div id="bills-empty-state" class="hidden py-12 px-4 text-center">
+            <div class="w-12 h-12 mx-auto rounded-full bg-emerald-50 dark:bg-emerald-950/40 text-emerald-500 flex items-center justify-center mb-3">
+              <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg>
+            </div>
+            <h3 class="text-sm font-bold text-slate-800 dark:text-slate-200">Tudo em dia!</h3>
+            <p class="text-xs text-slate-400 mt-1">Nenhuma conta encontrada com este filtro para o mês selecionado.</p>
           </div>
         </div>
 
@@ -595,27 +768,28 @@
         <span class="text-[10px] font-medium">Início</span>
       </button>
 
-      <!-- Tab 2: Extrato -->
+      <!-- Tab 2: Contas a Pagar -->
+      <button type="button" onclick="App.switchTab('bills')" data-bottom-tab="bills" class="flex flex-col items-center justify-center flex-1 h-full text-slate-400 dark:text-slate-500 hover:text-slate-700 relative">
+        <svg class="w-5 h-5 mb-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4"/></svg>
+        <span class="text-[10px] font-medium">Contas</span>
+        <span id="badge-bottom-bills" class="hidden absolute top-2 right-4 px-1.5 py-0.2 rounded-full text-[9px] bg-rose-500 text-white font-bold leading-tight">0</span>
+      </button>
+
+      <!-- Botão Central Novo (FAB / Quick Add) -->
+      <button type="button" onclick="App.openTransactionModal()" aria-label="Adicionar lançamento" class="flex items-center justify-center w-11 h-11 rounded-full bg-blue-600 text-white shadow-lg shadow-blue-600/40 -mt-4 active:scale-90 transition-transform flex-shrink-0">
+        <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M12 4v16m8-8H4"/></svg>
+      </button>
+
+      <!-- Tab 3: Extrato -->
       <button type="button" onclick="App.switchTab('transactions')" data-bottom-tab="transactions" class="flex flex-col items-center justify-center flex-1 h-full text-slate-400 dark:text-slate-500 hover:text-slate-700">
         <svg class="w-5 h-5 mb-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01"/></svg>
         <span class="text-[10px] font-medium">Extrato</span>
       </button>
 
-      <!-- Botão Central Novo (FAB / Quick Add) -->
-      <button type="button" onclick="App.openTransactionModal()" aria-label="Adicionar lançamento" class="flex items-center justify-center w-11 h-11 rounded-full bg-blue-600 text-white shadow-lg shadow-blue-600/40 -mt-4 active:scale-90 transition-transform">
-        <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M12 4v16m8-8H4"/></svg>
-      </button>
-
-      <!-- Tab 3: Gráficos -->
+      <!-- Tab 4: Relatórios / Gráficos -->
       <button type="button" onclick="App.switchTab('reports')" data-bottom-tab="reports" class="flex flex-col items-center justify-center flex-1 h-full text-slate-400 dark:text-slate-500 hover:text-slate-700">
         <svg class="w-5 h-5 mb-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 3.055A9.001 9.001 0 1020.945 13H11V3.055z"/><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20.488 9H15V3.512A9.025 9.025 0 0120.488 9z"/></svg>
         <span class="text-[10px] font-medium">Gráficos</span>
-      </button>
-
-      <!-- Tab 4: Metas -->
-      <button type="button" onclick="App.switchTab('budgets')" data-bottom-tab="budgets" class="flex flex-col items-center justify-center flex-1 h-full text-slate-400 dark:text-slate-500 hover:text-slate-700">
-        <svg class="w-5 h-5 mb-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"/></svg>
-        <span class="text-[10px] font-medium">Metas</span>
       </button>
 
     </nav>
