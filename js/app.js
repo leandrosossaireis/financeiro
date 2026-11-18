@@ -10,6 +10,13 @@ const SCHEMA_VERSION = 1;
 const STORAGE_KEY = 'fincontrol_storage_v1';
 const THEME_KEY = 'fincontrol_theme_preference';
 
+// Segurança / Criptografia
+const VAULT_KEY = 'fincontrol_vault_v1';          // Dados criptografados (AES-GCM)
+const LOCK_REASON_KEY = 'fincontrol_lock_reason'; // Mensagem exibida após bloqueio
+const PBKDF2_ITERATIONS = 310000;                 // Recomendação OWASP para PBKDF2-SHA256
+const MIN_PASSWORD_LENGTH = 8;
+const AUTO_LOCK_MINUTES = 15;                     // Bloqueio automático por inatividade
+
 const CATEGORIES = [
   { id: 'moradia', name: 'Moradia', icon: 'home', color: '#3b82f6' },
   { id: 'alimentacao', name: 'Alimentação', icon: 'utensils', color: '#f59e0b' },
@@ -94,38 +101,58 @@ const Utils = {
  * Suporta LocalStorage com tratamento de erros e validação de schema
  */
 const StorageService = {
-  loadData() {
+  // Fila de gravação: garante que escritas criptografadas (assíncronas) ocorram em ordem
+  _queue: Promise.resolve(),
+
+  // Normaliza/valida a estrutura do banco de dados
+  normalize(parsed) {
+    if (!parsed || typeof parsed !== 'object' || !Array.isArray(parsed.transactions)) {
+      console.warn('Estrutura de dados inválida. Inicializando padrão.');
+      return this.getDefaultData();
+    }
+    return {
+      version: parsed.version || SCHEMA_VERSION,
+      updatedAt: parsed.updatedAt || new Date().toISOString(),
+      transactions: parsed.transactions
+    };
+  },
+
+  // Lê dados antigos não criptografados (versões anteriores do app) para migração
+  readLegacyPlain() {
     try {
       const raw = localStorage.getItem(STORAGE_KEY);
-      if (!raw) {
-        return this.getDefaultData();
-      }
+      if (!raw) return null;
       const parsed = JSON.parse(raw);
-      // Validação básica do schema
-      if (!parsed || typeof parsed !== 'object' || !Array.isArray(parsed.transactions)) {
-        console.warn('Estrutura de dados corrompida. Inicializando padrão.');
-        return this.getDefaultData();
-      }
-      return parsed;
+      return Array.isArray(parsed?.transactions) ? this.normalize(parsed) : null;
     } catch (err) {
-      console.error('Falha ao ler dados do localStorage:', err);
-      return this.getDefaultData();
+      console.error('Falha ao ler dados legados:', err);
+      return null;
     }
   },
 
+  removeLegacyPlain() {
+    try { localStorage.removeItem(STORAGE_KEY); } catch (e) { /* ignora */ }
+  },
+
+  // Salva os dados criptografados no cofre (assíncrono, enfileirado)
   saveData(data) {
-    try {
-      const payload = {
-        version: SCHEMA_VERSION,
-        updatedAt: new Date().toISOString(),
-        transactions: Array.isArray(data.transactions) ? data.transactions : []
-      };
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(payload));
-      return true;
-    } catch (err) {
-      console.error('Erro ao salvar no localStorage (possível limite de cota):', err);
-      return false;
-    }
+    const payload = {
+      version: SCHEMA_VERSION,
+      updatedAt: new Date().toISOString(),
+      transactions: Array.isArray(data.transactions) ? data.transactions : []
+    };
+    this._queue = this._queue
+      .then(() => CryptoVault.encryptAndStore(payload))
+      .catch(err => {
+        console.error('Erro ao salvar dados criptografados (possível limite de cota):', err);
+        Toast.show('Erro ao salvar os dados. Faça um backup em JSON.', 'error');
+      });
+    return this._queue;
+  },
+
+  // Aguarda todas as gravações pendentes
+  flush() {
+    return this._queue;
   },
 
   getDefaultData() {
@@ -136,13 +163,360 @@ const StorageService = {
     };
   },
 
-  clearData() {
+  // Remove TODOS os dados (cofre + legado)
+  wipeAll() {
     try {
+      localStorage.removeItem(VAULT_KEY);
       localStorage.removeItem(STORAGE_KEY);
       return true;
     } catch (e) {
       return false;
     }
+  }
+};
+
+/**
+ * Cofre Criptográfico (Web Crypto API)
+ * - Chave derivada da senha via PBKDF2-SHA256 (310.000 iterações + salt aleatório)
+ * - Dados cifrados com AES-256-GCM (confidencialidade + integridade)
+ * - A senha e a chave NUNCA são gravadas; a chave existe apenas em memória enquanto desbloqueado
+ */
+const CryptoVault = {
+  key: null,
+  salt: null,
+  iterations: PBKDF2_ITERATIONS,
+
+  isSupported() {
+    return !!(window.crypto && window.crypto.subtle && window.crypto.getRandomValues);
+  },
+
+  hasVault() {
+    try {
+      return !!localStorage.getItem(VAULT_KEY);
+    } catch (e) {
+      return false;
+    }
+  },
+
+  toB64(buffer) {
+    const bytes = new Uint8Array(buffer);
+    let binary = '';
+    const chunk = 0x8000;
+    for (let i = 0; i < bytes.length; i += chunk) {
+      binary += String.fromCharCode.apply(null, bytes.subarray(i, i + chunk));
+    }
+    return btoa(binary);
+  },
+
+  fromB64(str) {
+    const binary = atob(str);
+    const bytes = new Uint8Array(binary.length);
+    for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+    return bytes;
+  },
+
+  async deriveKey(password, salt, iterations) {
+    const material = await crypto.subtle.importKey(
+      'raw', new TextEncoder().encode(password), 'PBKDF2', false, ['deriveKey']
+    );
+    return crypto.subtle.deriveKey(
+      { name: 'PBKDF2', salt, iterations, hash: 'SHA-256' },
+      material,
+      { name: 'AES-GCM', length: 256 },
+      false,
+      ['encrypt', 'decrypt']
+    );
+  },
+
+  readVault() {
+    const raw = localStorage.getItem(VAULT_KEY);
+    if (!raw) throw new Error('Cofre não encontrado.');
+    const vault = JSON.parse(raw);
+    if (!vault || !vault.salt || !vault.iv || !vault.data) {
+      throw new Error('Cofre corrompido.');
+    }
+    return vault;
+  },
+
+  async decryptVault(vault, key) {
+    const plain = await crypto.subtle.decrypt(
+      { name: 'AES-GCM', iv: this.fromB64(vault.iv) },
+      key,
+      this.fromB64(vault.data)
+    );
+    return JSON.parse(new TextDecoder().decode(plain));
+  },
+
+  // Cria um novo cofre (primeiro acesso ou troca de senha)
+  async create(password, data) {
+    this.salt = crypto.getRandomValues(new Uint8Array(16));
+    this.iterations = PBKDF2_ITERATIONS;
+    this.key = await this.deriveKey(password, this.salt, this.iterations);
+    await this.encryptAndStore(data);
+  },
+
+  // Desbloqueia o cofre existente. Lança erro com code BAD_PASSWORD se a senha estiver errada.
+  async unlock(password) {
+    const vault = this.readVault();
+    const salt = this.fromB64(vault.salt);
+    const iterations = vault.iterations || PBKDF2_ITERATIONS;
+    const key = await this.deriveKey(password, salt, iterations);
+
+    let data;
+    try {
+      data = await this.decryptVault(vault, key);
+    } catch (e) {
+      const err = new Error('Senha incorreta.');
+      err.code = 'BAD_PASSWORD';
+      throw err;
+    }
+
+    this.key = key;
+    this.salt = salt;
+    this.iterations = iterations;
+    return StorageService.normalize(data);
+  },
+
+  async verifyPassword(password) {
+    try {
+      const vault = this.readVault();
+      const key = await this.deriveKey(password, this.fromB64(vault.salt), vault.iterations || PBKDF2_ITERATIONS);
+      await this.decryptVault(vault, key);
+      return true;
+    } catch (e) {
+      return false;
+    }
+  },
+
+  async encryptAndStore(data) {
+    if (!this.key || !this.salt) throw new Error('Cofre bloqueado.');
+    const iv = crypto.getRandomValues(new Uint8Array(12)); // IV único a cada gravação
+    const encoded = new TextEncoder().encode(JSON.stringify(data));
+    const cipher = await crypto.subtle.encrypt({ name: 'AES-GCM', iv }, this.key, encoded);
+
+    localStorage.setItem(VAULT_KEY, JSON.stringify({
+      version: SCHEMA_VERSION,
+      kdf: 'PBKDF2-SHA256',
+      iterations: this.iterations,
+      cipher: 'AES-256-GCM',
+      salt: this.toB64(this.salt),
+      iv: this.toB64(iv),
+      data: this.toB64(cipher),
+      updatedAt: new Date().toISOString()
+    }));
+  },
+
+  async changePassword(newPassword, data) {
+    await this.create(newPassword, data);
+  },
+
+  lock() {
+    this.key = null;
+    this.salt = null;
+  }
+};
+
+/**
+ * Tela de Login / Criação de Senha e Bloqueio Automático
+ */
+const AuthUI = {
+  mode: 'login', // 'setup' (primeiro acesso) | 'login'
+  failedAttempts: 0,
+  idleTimer: null,
+  busy: false,
+
+  el(id) {
+    return document.getElementById(id);
+  },
+
+  init() {
+    this.el('auth-form').addEventListener('submit', (e) => this.handleSubmit(e));
+    this.el('auth-toggle-visibility').addEventListener('click', () => this.toggleVisibility());
+    this.el('auth-forgot').addEventListener('click', () => this.handleForgot());
+
+    // Mensagem pós-bloqueio (ex: inatividade)
+    const reason = sessionStorage.getItem(LOCK_REASON_KEY);
+    if (reason) {
+      sessionStorage.removeItem(LOCK_REASON_KEY);
+      const info = this.el('auth-info');
+      info.textContent = reason;
+      info.classList.remove('hidden');
+    }
+
+    if (!this.isCryptoAvailable()) return;
+
+    this.mode = CryptoVault.hasVault() ? 'login' : 'setup';
+    this.renderMode();
+    this.show();
+  },
+
+  isCryptoAvailable() {
+    if (CryptoVault.isSupported()) return true;
+    this.showError('Seu navegador não suporta a criptografia necessária (Web Crypto API). Acesse pelo endereço HTTPS do GitHub Pages ou use um navegador atualizado.');
+    this.el('auth-submit').disabled = true;
+    this.show();
+    return false;
+  },
+
+  renderMode() {
+    const isSetup = this.mode === 'setup';
+    this.el('auth-title').textContent = isSetup ? 'Crie sua senha de acesso' : 'Bem-vindo de volta';
+    this.el('auth-subtitle').textContent = isSetup
+      ? 'Seus dados financeiros serão criptografados com esta senha.'
+      : 'Digite sua senha para desbloquear seus dados.';
+    this.el('auth-submit-label').textContent = isSetup ? 'Criar senha e entrar' : 'Desbloquear';
+    this.el('auth-confirm-wrapper').classList.toggle('hidden', !isSetup);
+    this.el('auth-setup-notice').classList.toggle('hidden', !isSetup);
+    this.el('auth-forgot').classList.toggle('hidden', isSetup);
+    this.el('auth-password').setAttribute('autocomplete', isSetup ? 'new-password' : 'current-password');
+    this.el('auth-password-confirm').required = isSetup;
+  },
+
+  show() {
+    this.el('auth-screen').classList.remove('hidden');
+    this.el('app-root').classList.add('hidden');
+    setTimeout(() => this.el('auth-password').focus(), 50);
+  },
+
+  hide() {
+    this.el('auth-screen').classList.add('hidden');
+    this.el('app-root').classList.remove('hidden');
+  },
+
+  showError(msg) {
+    const el = this.el('auth-error');
+    el.textContent = msg;
+    el.classList.remove('hidden');
+  },
+
+  clearError() {
+    this.el('auth-error').classList.add('hidden');
+  },
+
+  setLoading(loading) {
+    this.busy = loading;
+    this.el('auth-submit').disabled = loading;
+    this.el('auth-spinner').classList.toggle('hidden', !loading);
+  },
+
+  toggleVisibility() {
+    const inputs = [this.el('auth-password'), this.el('auth-password-confirm')];
+    const show = inputs[0].type === 'password';
+    inputs.forEach(i => { i.type = show ? 'text' : 'password'; });
+    this.el('auth-toggle-visibility').setAttribute('aria-label', show ? 'Ocultar senha' : 'Mostrar senha');
+    this.el('auth-eye-open').classList.toggle('hidden', show);
+    this.el('auth-eye-closed').classList.toggle('hidden', !show);
+  },
+
+  async handleSubmit(e) {
+    e.preventDefault();
+    if (this.busy) return;
+    this.clearError();
+
+    const pwd = this.el('auth-password').value;
+
+    if (this.mode === 'setup') {
+      const confirmPwd = this.el('auth-password-confirm').value;
+      if (pwd.length < MIN_PASSWORD_LENGTH) {
+        this.showError(`A senha deve ter no mínimo ${MIN_PASSWORD_LENGTH} caracteres.`);
+        return;
+      }
+      if (pwd !== confirmPwd) {
+        this.showError('As senhas não coincidem.');
+        return;
+      }
+
+      this.setLoading(true);
+      try {
+        // Migra dados antigos (não criptografados), se existirem
+        const legacy = StorageService.readLegacyPlain();
+        const initial = legacy || StorageService.getDefaultData();
+        await CryptoVault.create(pwd, initial);
+        StorageService.removeLegacyPlain();
+        this.onSuccess(initial, legacy
+          ? 'Senha criada! Seus dados existentes agora estão criptografados.'
+          : 'Senha criada! Seus dados serão salvos criptografados.');
+      } catch (err) {
+        console.error(err);
+        this.showError('Não foi possível criar o cofre: ' + err.message);
+      } finally {
+        this.setLoading(false);
+      }
+      return;
+    }
+
+    // Modo login
+    if (!pwd) {
+      this.showError('Digite sua senha.');
+      return;
+    }
+
+    this.setLoading(true);
+    try {
+      const data = await CryptoVault.unlock(pwd);
+      this.failedAttempts = 0;
+      this.onSuccess(data);
+    } catch (err) {
+      this.failedAttempts++;
+      // Atraso progressivo contra tentativas repetidas
+      const delay = Math.min(250 * Math.pow(2, this.failedAttempts), 8000);
+      await new Promise(r => setTimeout(r, delay));
+      this.showError(err.code === 'BAD_PASSWORD'
+        ? `Senha incorreta. (tentativa ${this.failedAttempts})`
+        : 'Não foi possível abrir os dados: ' + err.message);
+      this.el('auth-password').select();
+    } finally {
+      this.setLoading(false);
+    }
+  },
+
+  onSuccess(data, message) {
+    this.el('auth-password').value = '';
+    this.el('auth-password-confirm').value = '';
+    this.el('auth-info').classList.add('hidden');
+    this.hide();
+    App.onUnlocked(data);
+    this.startIdleWatch();
+    if (message) Toast.show(message, 'success', 5000);
+  },
+
+  // Bloqueia: aguarda gravações, descarta a chave e recarrega a página (limpa a memória)
+  async lock(reason) {
+    try {
+      await StorageService.flush();
+    } finally {
+      CryptoVault.lock();
+      if (reason) sessionStorage.setItem(LOCK_REASON_KEY, reason);
+      location.reload();
+    }
+  },
+
+  startIdleWatch() {
+    const reset = () => {
+      clearTimeout(this.idleTimer);
+      this.idleTimer = setTimeout(() => {
+        this.lock(`Sessão bloqueada automaticamente após ${AUTO_LOCK_MINUTES} minutos de inatividade.`);
+      }, AUTO_LOCK_MINUTES * 60 * 1000);
+    };
+    ['mousemove', 'keydown', 'click', 'touchstart', 'scroll'].forEach(ev => {
+      window.addEventListener(ev, reset, { passive: true });
+    });
+    reset();
+  },
+
+  handleForgot() {
+    const ok1 = confirm(
+      'Por segurança, NÃO existe recuperação de senha: os dados são criptografados com ela.\n\n' +
+      'A única opção é APAGAR todos os dados deste navegador e começar de novo ' +
+      '(você poderá importar um backup JSON depois).\n\nDeseja continuar?'
+    );
+    if (!ok1) return;
+    const ok2 = confirm('Confirma a exclusão DEFINITIVA de todos os lançamentos deste navegador?');
+    if (!ok2) return;
+
+    StorageService.wipeAll();
+    sessionStorage.setItem(LOCK_REASON_KEY, 'Dados apagados. Crie uma nova senha para começar.');
+    location.reload();
   }
 };
 
@@ -556,18 +930,19 @@ const App = {
 
   init() {
     ThemeManager.init();
-
-    // Carregar dados salvos
-    const data = StorageService.loadData();
-    this.state.transactions = data.transactions || [];
-
-    // Se estiver vazio, exibir banner/botão convidativo
     this.populateCategorySelects();
     this.setupEventListeners();
+
+    // Nenhum dado é carregado antes da autenticação
+    AuthUI.init();
+  },
+
+  // Chamado pelo AuthUI após desbloqueio bem-sucedido
+  onUnlocked(data) {
+    this.state.transactions = data.transactions || [];
     this.updateMonthSelector();
     this.render();
 
-    // Se não tiver nenhuma transação, sugerir carregar dados de exemplo com toast discreto
     if (this.state.transactions.length === 0) {
       setTimeout(() => {
         Toast.show('Bem-vindo! Clique em "Dados de Exemplo" para explorar a interface.', 'info', 5000);
@@ -683,6 +1058,17 @@ const App = {
     if (btnLoadSample) btnLoadSample.addEventListener('click', () => this.loadSampleData());
     if (btnClearAll) btnClearAll.addEventListener('click', () => this.confirmClearAll());
 
+    // Segurança: bloquear sessão e alterar senha
+    const btnLock = document.getElementById('btn-lock');
+    const btnChangePassword = document.getElementById('btn-change-password');
+    const formPassword = document.getElementById('form-password');
+    const btnCancelPassword = document.getElementById('btn-cancel-password');
+
+    if (btnLock) btnLock.addEventListener('click', () => AuthUI.lock('Sessão bloqueada.'));
+    if (btnChangePassword) btnChangePassword.addEventListener('click', () => this.openPasswordModal());
+    if (formPassword) formPassword.addEventListener('submit', (e) => this.handleChangePassword(e));
+    if (btnCancelPassword) btnCancelPassword.addEventListener('click', () => this.closePasswordModal());
+
     // Modal de Confirmação de Exclusão
     const btnCancelDelete = document.getElementById('btn-cancel-delete');
     const btnConfirmDelete = document.getElementById('btn-confirm-delete');
@@ -705,10 +1091,11 @@ const App = {
         this.closeTransactionModal();
         this.closeDeleteModal();
         this.closeImportModal();
+        this.closePasswordModal();
       }
     });
 
-    ['modal-transaction', 'modal-delete', 'modal-import'].forEach(id => {
+    ['modal-transaction', 'modal-delete', 'modal-import', 'modal-password'].forEach(id => {
       const el = document.getElementById(id);
       if (el) {
         el.addEventListener('click', (e) => {
@@ -716,6 +1103,7 @@ const App = {
             this.closeTransactionModal();
             this.closeDeleteModal();
             this.closeImportModal();
+            this.closePasswordModal();
           }
         });
       }
@@ -1302,6 +1690,68 @@ const App = {
     };
 
     reader.readAsText(file);
+  },
+
+  // =========================================================================
+  // SEGURANÇA: ALTERAÇÃO DE SENHA
+  // =========================================================================
+
+  openPasswordModal() {
+    const modal = document.getElementById('modal-password');
+    const form = document.getElementById('form-password');
+    if (form) form.reset();
+    if (modal) {
+      modal.classList.remove('hidden');
+      modal.classList.add('flex');
+      setTimeout(() => document.getElementById('pwd-current').focus(), 50);
+    }
+  },
+
+  closePasswordModal() {
+    const modal = document.getElementById('modal-password');
+    if (modal) {
+      modal.classList.add('hidden');
+      modal.classList.remove('flex');
+    }
+  },
+
+  async handleChangePassword(e) {
+    e.preventDefault();
+    const current = document.getElementById('pwd-current').value;
+    const newPwd = document.getElementById('pwd-new').value;
+    const confirmPwd = document.getElementById('pwd-confirm').value;
+    const btn = document.getElementById('btn-save-password');
+
+    if (newPwd.length < MIN_PASSWORD_LENGTH) {
+      Toast.show(`A nova senha deve ter no mínimo ${MIN_PASSWORD_LENGTH} caracteres.`, 'warning');
+      return;
+    }
+    if (newPwd !== confirmPwd) {
+      Toast.show('A confirmação não coincide com a nova senha.', 'warning');
+      return;
+    }
+
+    btn.disabled = true;
+    try {
+      await StorageService.flush();
+      const valid = await CryptoVault.verifyPassword(current);
+      if (!valid) {
+        Toast.show('Senha atual incorreta.', 'error');
+        return;
+      }
+      await CryptoVault.changePassword(newPwd, {
+        version: SCHEMA_VERSION,
+        updatedAt: new Date().toISOString(),
+        transactions: this.state.transactions
+      });
+      this.closePasswordModal();
+      Toast.show('Senha alterada com sucesso!', 'success');
+    } catch (err) {
+      console.error(err);
+      Toast.show('Erro ao alterar a senha: ' + err.message, 'error');
+    } finally {
+      btn.disabled = false;
+    }
   },
 
   loadSampleData() {

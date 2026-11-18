@@ -148,9 +148,20 @@ Pronto! Seu Controle Financeiro Pessoal estará publicado e pronto para uso em q
 
 ## 🔒 Privacidade e Segurança dos Dados
 
-- **Privacidade Absoluta:** Nenhum dado financeiro, valor ou descrição é enviado para nenhum servidor externo.
-- **Armazenamento Local:** Tudo fica gravado exclusivamente no `localStorage` do seu próprio navegador.
-- **Backup Sempre à Mão:** Utilize a função **Backup > Exportar JSON** periodicamente para ter cópias de segurança salvas em seu computador ou nuvem pessoal.
+### Login com senha + criptografia
+- No **primeiro acesso**, você cria uma senha (mínimo 8 caracteres).
+- Os dados são salvos **criptografados** com **AES-256-GCM**. A chave vem da sua senha via **PBKDF2-SHA256** (310.000 iterações e salt aleatório).
+- A senha e a chave **nunca são gravadas**. A chave fica só na memória enquanto o app está desbloqueado.
+- Botão de **cadeado** no cabeçalho para bloquear a sessão. Ela também é **bloqueada sozinha após 15 minutos sem uso**.
+- **Alterar Senha** fica no menu *Backup*.
+- Atraso progressivo após tentativas de senha erradas.
+- Se você já tinha dados de uma versão anterior sem senha, eles são **migrados e criptografados** quando você cria a senha.
+
+> ⚠️ **Não existe recuperação de senha.** Se você esquecer, os dados não podem ser abertos. A única saída é apagá-los e importar um backup. Faça **Backup > Exportar JSON** com frequência e guarde em local seguro (o arquivo exportado **não** é criptografado).
+
+### Onde ficam os dados
+- **Nenhum dado é enviado para servidores.** O GitHub Pages entrega apenas o código (HTML/CSS/JS), que é público. Seus lançamentos ficam no `localStorage` do seu navegador.
+- Cada navegador/dispositivo tem seus próprios dados. Para levar os dados para outro aparelho, use Exportar/Importar JSON.
 
 ---
 

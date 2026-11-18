@@ -5,6 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Controle Financeiro Pessoal | FinControl</title>
   <meta name="description" content="Aplicação completa e segura de Controle Financeiro Pessoal, 100% client-side, otimizada para GitHub Pages.">
+  <meta name="robots" content="noindex, nofollow">
   <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>💳</text></svg>">
 
   <!-- Tailwind CSS via CDN -->
@@ -38,6 +39,80 @@
 </head>
 
 <body class="h-full bg-slate-50 dark:bg-slate-950 text-slate-800 dark:text-slate-100 flex flex-col font-sans transition-colors duration-200">
+
+  <!-- ========================================================================
+       TELA DE LOGIN / CRIAÇÃO DE SENHA (exibida antes de qualquer dado)
+       ======================================================================== -->
+  <section id="auth-screen" aria-labelledby="auth-title" class="fixed inset-0 z-[60] overflow-y-auto bg-gradient-to-br from-slate-900 via-slate-950 to-blue-950 flex items-center justify-center p-4">
+    <div class="w-full max-w-md animate-fade-in">
+
+      <!-- Logo -->
+      <div class="flex flex-col items-center mb-6 text-center">
+        <div class="w-14 h-14 rounded-2xl bg-gradient-to-tr from-blue-700 to-blue-500 flex items-center justify-center text-white shadow-lg shadow-blue-500/30 mb-3">
+          <svg class="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"/>
+          </svg>
+        </div>
+        <span class="text-2xl font-bold tracking-tight text-white">FinControl</span>
+        <span class="text-xs text-slate-400">Controle Financeiro Pessoal</span>
+      </div>
+
+      <!-- Card -->
+      <div class="bg-white dark:bg-slate-900 rounded-2xl shadow-2xl border border-slate-200 dark:border-slate-800 p-6 sm:p-8">
+        <h1 id="auth-title" class="text-lg font-bold text-slate-900 dark:text-white">Bem-vindo de volta</h1>
+        <p id="auth-subtitle" class="text-sm text-slate-500 dark:text-slate-400 mt-1">Digite sua senha para desbloquear seus dados.</p>
+
+        <div id="auth-info" role="status" class="hidden mt-4 text-xs px-3 py-2 rounded-xl bg-blue-50 dark:bg-blue-950/50 text-blue-700 dark:text-blue-300 border border-blue-200 dark:border-blue-900"></div>
+
+        <div id="auth-setup-notice" class="hidden mt-4 text-xs px-3 py-2.5 rounded-xl bg-amber-50 dark:bg-amber-950/40 text-amber-800 dark:text-amber-300 border border-amber-200 dark:border-amber-900">
+          <strong>Importante:</strong> não existe recuperação de senha. Se você esquecer, os dados não poderão ser abertos. Mantenha backups JSON periódicos.
+        </div>
+
+        <form id="auth-form" class="mt-5 space-y-4" novalidate>
+          <!-- Campo de usuário oculto para gerenciadores de senha -->
+          <input type="text" name="username" value="fincontrol" autocomplete="username" class="hidden" tabindex="-1" aria-hidden="true">
+
+          <div>
+            <label for="auth-password" class="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">Senha</label>
+            <div class="relative">
+              <input type="password" id="auth-password" required autocomplete="current-password" placeholder="••••••••" class="w-full pl-3.5 pr-11 py-2.5 text-sm rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500">
+              <button id="auth-toggle-visibility" type="button" aria-label="Mostrar senha" class="absolute inset-y-0 right-0 px-3 flex items-center text-slate-400 hover:text-slate-600 dark:hover:text-slate-200">
+                <svg id="auth-eye-open" class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"/></svg>
+                <svg id="auth-eye-closed" class="w-5 h-5 hidden" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.543-7a9.97 9.97 0 011.563-3.029m5.858.908a3 3 0 114.243 4.243M9.878 9.878l4.242 4.242M9.88 9.88l-3.29-3.29m7.532 7.532l3.29 3.29M3 3l3.59 3.59m0 0A9.953 9.953 0 0112 5c4.478 0 8.268 2.943 9.543 7a10.025 10.025 0 01-4.132 5.411m0 0L21 21"/></svg>
+              </button>
+            </div>
+          </div>
+
+          <div id="auth-confirm-wrapper" class="hidden">
+            <label for="auth-password-confirm" class="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">Confirmar senha</label>
+            <input type="password" id="auth-password-confirm" autocomplete="new-password" placeholder="••••••••" class="w-full px-3.5 py-2.5 text-sm rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500">
+            <p class="text-[11px] text-slate-400 mt-1">Mínimo de 8 caracteres. Use letras, números e símbolos.</p>
+          </div>
+
+          <div id="auth-error" role="alert" class="hidden text-xs px-3 py-2 rounded-xl bg-rose-50 dark:bg-rose-950/40 text-rose-700 dark:text-rose-300 border border-rose-200 dark:border-rose-900"></div>
+
+          <button id="auth-submit" type="submit" class="w-full inline-flex items-center justify-center gap-2 px-4 py-2.5 text-sm font-semibold rounded-xl text-white bg-blue-600 hover:bg-blue-700 active:bg-blue-800 disabled:opacity-60 disabled:cursor-wait shadow-md shadow-blue-600/25 transition-all">
+            <svg id="auth-spinner" class="hidden w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z"></path></svg>
+            <span id="auth-submit-label">Desbloquear</span>
+          </button>
+
+          <div class="text-center">
+            <button id="auth-forgot" type="button" class="hidden text-xs text-slate-500 dark:text-slate-400 hover:text-rose-600 dark:hover:text-rose-400 underline-offset-2 hover:underline">
+              Esqueci minha senha
+            </button>
+          </div>
+        </form>
+      </div>
+
+      <p class="text-center text-[11px] text-slate-400 mt-5 leading-relaxed">
+        🔒 Criptografia AES-256-GCM com chave derivada por PBKDF2.<br>
+        Seus dados ficam apenas neste navegador e nunca são enviados a servidores.
+      </p>
+    </div>
+  </section>
+
+  <!-- Conteúdo da aplicação (visível somente após desbloqueio) -->
+  <div id="app-root" class="hidden flex-1 flex flex-col">
 
   <!-- ========================================================================
        CABEÇALHO (NAVBAR)
@@ -97,12 +172,21 @@
               <svg class="w-4 h-4 text-purple-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"/></svg>
               <span>Importar JSON</span>
             </button>
+            <button id="btn-change-password" type="button" class="w-full text-left px-3.5 py-2 text-xs text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 flex items-center gap-2 border-t border-slate-100 dark:border-slate-800">
+              <svg class="w-4 h-4 text-amber-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z"/></svg>
+              <span>Alterar Senha</span>
+            </button>
             <button id="btn-clear-all" type="button" class="w-full text-left px-3.5 py-2 text-xs text-rose-600 dark:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/40 flex items-center gap-2 border-t border-slate-100 dark:border-slate-800">
               <svg class="w-4 h-4 text-rose-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/></svg>
               <span>Zerar Dados</span>
             </button>
           </div>
         </div>
+
+        <!-- Bloquear sessão -->
+        <button id="btn-lock" type="button" aria-label="Bloquear (sair)" title="Bloquear (sair)" class="p-2 rounded-lg text-slate-500 hover:text-rose-600 dark:text-slate-400 dark:hover:text-rose-400 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors">
+          <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"/></svg>
+        </button>
 
         <!-- Toggle Dark/Light Mode -->
         <button id="btn-theme-toggle" type="button" aria-label="Alternar Tema Claro/Escuro" class="p-2 rounded-lg text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors">
@@ -396,6 +480,8 @@
       </div>
     </div>
   </footer>
+  </div>
+  <!-- /app-root -->
 
   <!-- ========================================================================
        MODAL: ADICIONAR / EDITAR LANÇAMENTO
@@ -575,6 +661,36 @@
         </div>
 
       </div>
+    </div>
+  </div>
+
+  <!-- ========================================================================
+       MODAL: ALTERAR SENHA
+       ======================================================================== -->
+  <div id="modal-password" class="fixed inset-0 z-50 hidden items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm modal-backdrop-anim">
+    <div class="bg-white dark:bg-slate-900 w-full max-w-md rounded-2xl shadow-2xl border border-slate-200 dark:border-slate-800 modal-card-anim overflow-hidden">
+      <div class="px-6 py-4 border-b border-slate-200 dark:border-slate-800">
+        <h3 class="text-base font-bold text-slate-900 dark:text-white">Alterar Senha</h3>
+      </div>
+      <form id="form-password" class="p-6 space-y-4">
+        <input type="text" name="username" value="fincontrol" autocomplete="username" class="hidden" tabindex="-1" aria-hidden="true">
+        <div>
+          <label for="pwd-current" class="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">Senha atual</label>
+          <input type="password" id="pwd-current" required autocomplete="current-password" class="w-full px-3.5 py-2 text-sm rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500">
+        </div>
+        <div>
+          <label for="pwd-new" class="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">Nova senha</label>
+          <input type="password" id="pwd-new" required minlength="8" autocomplete="new-password" class="w-full px-3.5 py-2 text-sm rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500">
+        </div>
+        <div>
+          <label for="pwd-confirm" class="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">Confirmar nova senha</label>
+          <input type="password" id="pwd-confirm" required minlength="8" autocomplete="new-password" class="w-full px-3.5 py-2 text-sm rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500">
+        </div>
+        <div class="pt-4 border-t border-slate-200 dark:border-slate-800 flex items-center justify-end gap-3">
+          <button id="btn-cancel-password" type="button" class="px-4 py-2 text-xs sm:text-sm font-semibold rounded-xl text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors">Cancelar</button>
+          <button id="btn-save-password" type="submit" class="px-5 py-2 text-xs sm:text-sm font-semibold rounded-xl text-white bg-blue-600 hover:bg-blue-700 disabled:opacity-60 shadow-md shadow-blue-600/20 transition-all">Salvar nova senha</button>
+        </div>
+      </form>
     </div>
   </div>
 
