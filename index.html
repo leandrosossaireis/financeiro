@@ -892,26 +892,56 @@
 
         <!-- Opção de Parcelamento / Repetição (Apenas para novos) -->
         <div id="tx-repeat-wrapper" class="pt-2 border-t border-slate-100 dark:border-slate-800">
-          <label class="flex items-center gap-2 cursor-pointer mb-2">
-            <input type="checkbox" id="tx-repeat-checkbox" class="text-blue-600 rounded focus:ring-blue-500">
+          <label class="flex items-center gap-2 cursor-pointer mb-2 select-none">
+            <input type="checkbox" id="tx-repeat-checkbox" class="text-blue-600 rounded focus:ring-blue-500 w-4 h-4">
             <span class="text-xs font-semibold text-slate-700 dark:text-slate-300">Repetir ou Parcelar lançamento</span>
           </label>
 
-          <div id="tx-repeat-fields" class="hidden grid grid-cols-2 gap-3 pl-6">
+          <div id="tx-repeat-fields" class="hidden space-y-3 pl-6 pt-1">
+            <!-- Modo: Conta Fixa vs Parcelamento -->
             <div>
-              <label for="tx-installments" class="block text-[11px] text-slate-500 mb-1">Número de Parcelas</label>
-              <select id="tx-installments" class="w-full px-2.5 py-1.5 text-xs rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white">
-                <option value="2">2x mensais</option>
-                <option value="3">3x mensais</option>
-                <option value="4">4x mensais</option>
-                <option value="5">5x mensais</option>
-                <option value="6">6x mensais</option>
-                <option value="10">10x mensais</option>
-                <option value="12">12x mensais</option>
-              </select>
+              <span class="block text-[11px] font-medium text-slate-500 dark:text-slate-400 mb-1.5">Tipo de repetição:</span>
+              <div class="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                <label class="flex items-start gap-2.5 p-2.5 rounded-xl border border-blue-500/40 bg-blue-50/40 dark:bg-blue-950/20 cursor-pointer text-xs transition-colors hover:border-blue-500">
+                  <input type="radio" name="tx-repeat-mode" value="fixed" checked class="mt-0.5 text-blue-600 focus:ring-blue-500">
+                  <div>
+                    <div class="font-semibold text-slate-800 dark:text-slate-200">🔄 Repetir Conta Fixa</div>
+                    <div class="text-[10px] text-slate-500 dark:text-slate-400 leading-tight">Valor integral todo mês (ex: Aluguel, Internet, Netflix, Salário)</div>
+                  </div>
+                </label>
+
+                <label class="flex items-start gap-2.5 p-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/60 cursor-pointer text-xs transition-colors hover:border-blue-500">
+                  <input type="radio" name="tx-repeat-mode" value="installment" class="mt-0.5 text-blue-600 focus:ring-blue-500">
+                  <div>
+                    <div class="font-semibold text-slate-800 dark:text-slate-200">💳 Parcelamento</div>
+                    <div class="text-[10px] text-slate-500 dark:text-slate-400 leading-tight">Dividir valor em parcelas (ex: Compra parcelada 1/10)</div>
+                  </div>
+                </label>
+              </div>
             </div>
-            <div class="text-[11px] text-slate-400 flex items-center">
-              Será criado 1 lançamento para cada mês consecutivo.
+
+            <!-- Quantidade de meses / parcelas (Manual ou Atalhos) -->
+            <div class="space-y-1.5">
+              <label for="tx-repeat-count" class="block text-[11px] font-medium text-slate-500 dark:text-slate-400">
+                Quantidade de meses / parcelas:
+              </label>
+              <div class="flex flex-wrap items-center gap-2">
+                <input type="number" id="tx-repeat-count" inputmode="numeric" min="2" max="60" value="12"
+                  class="w-20 px-2.5 py-1.5 text-xs rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white font-bold text-center focus:ring-2 focus:ring-blue-500">
+                <div class="flex items-center gap-1 flex-wrap">
+                  <button type="button" class="btn-quick-repeat px-2.5 py-1 text-[11px] rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-100 dark:bg-slate-700 hover:bg-slate-200 dark:hover:bg-slate-600 text-slate-700 dark:text-slate-200 font-medium" data-count="3">3x</button>
+                  <button type="button" class="btn-quick-repeat px-2.5 py-1 text-[11px] rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-100 dark:bg-slate-700 hover:bg-slate-200 dark:hover:bg-slate-600 text-slate-700 dark:text-slate-200 font-medium" data-count="6">6x</button>
+                  <button type="button" class="btn-quick-repeat px-2.5 py-1 text-[11px] rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-100 dark:bg-slate-700 hover:bg-slate-200 dark:hover:bg-slate-600 text-slate-700 dark:text-slate-200 font-medium" data-count="12">12 meses (1 ano)</button>
+                  <button type="button" class="btn-quick-repeat px-2.5 py-1 text-[11px] rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-100 dark:bg-slate-700 hover:bg-slate-200 dark:hover:bg-slate-600 text-slate-700 dark:text-slate-200 font-medium" data-count="24">24x</button>
+                </div>
+              </div>
+              <p class="text-[10px] text-slate-400">Digite qualquer número livremente no campo acima ou escolha um atalho rápido.</p>
+            </div>
+
+            <!-- Resumo dinâmico -->
+            <div id="tx-repeat-summary" class="p-2.5 rounded-xl bg-blue-50 dark:bg-blue-950/40 border border-blue-200 dark:border-blue-900/60 text-xs text-blue-700 dark:text-blue-300 font-medium flex items-center gap-2">
+              <span id="tx-repeat-summary-icon" class="text-base flex-shrink-0">🔄</span>
+              <span id="tx-repeat-summary-text" class="leading-relaxed">Será lançado o mesmo valor integral todo mês.</span>
             </div>
           </div>
         </div>

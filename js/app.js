@@ -1462,6 +1462,25 @@ const App = {
     document.getElementById('tx-repeat-checkbox')?.addEventListener('change', (e) => {
       const fields = document.getElementById('tx-repeat-fields');
       if (fields) fields.classList.toggle('hidden', !e.target.checked);
+      this.updateRepeatSummary();
+    });
+
+    document.querySelectorAll('input[name="tx-repeat-mode"]').forEach(radio => {
+      radio.addEventListener('change', () => this.updateRepeatSummary());
+    });
+
+    document.getElementById('tx-repeat-count')?.addEventListener('input', () => this.updateRepeatSummary());
+    document.getElementById('tx-amount')?.addEventListener('input', () => this.updateRepeatSummary());
+
+    document.querySelectorAll('.btn-quick-repeat').forEach(btn => {
+      btn.addEventListener('click', (e) => {
+        const count = e.currentTarget.getAttribute('data-count');
+        const countInput = document.getElementById('tx-repeat-count');
+        if (countInput && count) {
+          countInput.value = count;
+          this.updateRepeatSummary();
+        }
+      });
     });
 
     // Navegação de Mês
@@ -2284,7 +2303,13 @@ const App = {
 
     if (repeatWrapper) {
       repeatWrapper.classList.toggle('hidden', !!editId);
+      const repeatCheckbox = document.getElementById('tx-repeat-checkbox');
+      if (repeatCheckbox) repeatCheckbox.checked = false;
       document.getElementById('tx-repeat-fields')?.classList.add('hidden');
+      const fixedRadio = document.querySelector('input[name="tx-repeat-mode"][value="fixed"]');
+      if (fixedRadio) fixedRadio.checked = true;
+      const countInput = document.getElementById('tx-repeat-count');
+      if (countInput) countInput.value = '12';
     }
 
     if (editId) {
@@ -2331,6 +2356,37 @@ const App = {
     this.state.editingId = null;
   },
 
+  updateRepeatSummary() {
+    const isRepeat = document.getElementById('tx-repeat-checkbox')?.checked;
+    if (!isRepeat) return;
+
+    const mode = document.querySelector('input[name="tx-repeat-mode"]:checked')?.value || 'fixed';
+    const countInput = document.getElementById('tx-repeat-count');
+    let count = parseInt(countInput?.value || '12', 10);
+    if (isNaN(count) || count < 2) count = 2;
+    if (count > 60) count = 60;
+
+    const amountInput = document.getElementById('tx-amount');
+    const amount = parseFloat(amountInput?.value) || 0;
+
+    const iconEl = document.getElementById('tx-repeat-summary-icon');
+    const textEl = document.getElementById('tx-repeat-summary-text');
+
+    if (!textEl) return;
+
+    if (mode === 'fixed') {
+      if (iconEl) iconEl.textContent = '🔄';
+      const formattedAmount = this.formatDisplayValue(amount);
+      const totalAmount = this.formatDisplayValue(amount * count);
+      textEl.innerHTML = `Lançamento fixo de <strong>${formattedAmount}</strong> todo mês durante <strong>${count} meses</strong> (Total acumulado: ${totalAmount}).`;
+    } else {
+      if (iconEl) iconEl.textContent = '💳';
+      const partAmount = count > 0 ? Math.round((amount / count) * 100) / 100 : 0;
+      const formattedPart = this.formatDisplayValue(partAmount);
+      textEl.innerHTML = `Dividido em <strong>${count} parcelas de ${formattedPart}</strong> cada (de 1/${count} até ${count}/${count}).`;
+    }
+  },
+
   handleTransactionSubmit(e) {
     e.preventDefault();
 
@@ -2344,7 +2400,10 @@ const App = {
     const status = document.getElementById('tx-status').value;
 
     const isRepeat = document.getElementById('tx-repeat-checkbox')?.checked;
-    const installments = parseInt(document.getElementById('tx-installments')?.value || '1', 10);
+    const repeatMode = document.querySelector('input[name="tx-repeat-mode"]:checked')?.value || 'fixed';
+    let repeatCount = parseInt(document.getElementById('tx-repeat-count')?.value || '12', 10);
+    if (isNaN(repeatCount) || repeatCount < 2) repeatCount = 2;
+    if (repeatCount > 60) repeatCount = 60;
 
     if (!description || isNaN(amount) || amount <= 0 || !date) {
       Toast.show('Preencha os campos obrigatórios corretamente.', 'warning');
@@ -2368,27 +2427,46 @@ const App = {
         Toast.show('Lançamento atualizado!', 'success');
       }
     } else {
-      if (isRepeat && installments > 1) {
-        // Criar parcelas
-        const partAmount = Math.round((amount / installments) * 100) / 100;
+      if (isRepeat && repeatCount > 1) {
         const now = Date.now();
-
-        for (let i = 0; i < installments; i++) {
-          const installmentDate = Utils.addMonths(date, i);
-          const newTx = {
-            id: Utils.generateId(),
-            description: `${description} (${i + 1}/${installments})`,
-            amount: partAmount,
-            type,
-            category,
-            account,
-            date: installmentDate,
-            status: i === 0 ? status : 'pending',
-            updatedAt: now + i
-          };
-          this.state.transactions.unshift(newTx);
+        if (repeatMode === 'installment') {
+          // Parcelamento (divide o valor total)
+          const partAmount = Math.round((amount / repeatCount) * 100) / 100;
+          for (let i = 0; i < repeatCount; i++) {
+            const installmentDate = Utils.addMonths(date, i);
+            const newTx = {
+              id: Utils.generateId(),
+              description: `${description} (${i + 1}/${repeatCount})`,
+              amount: partAmount,
+              type,
+              category,
+              account,
+              date: installmentDate,
+              status: i === 0 ? status : 'pending',
+              updatedAt: now + i
+            };
+            this.state.transactions.unshift(newTx);
+          }
+          Toast.show(`${repeatCount} parcelas cadastradas com sucesso!`, 'success');
+        } else {
+          // Conta Fixa Recorrente (mesmo valor integral todo mês)
+          for (let i = 0; i < repeatCount; i++) {
+            const repeatDate = Utils.addMonths(date, i);
+            const newTx = {
+              id: Utils.generateId(),
+              description,
+              amount,
+              type,
+              category,
+              account,
+              date: repeatDate,
+              status: i === 0 ? status : 'pending',
+              updatedAt: now + i
+            };
+            this.state.transactions.unshift(newTx);
+          }
+          Toast.show(`Conta fixa repetida para os próximos ${repeatCount} meses!`, 'success');
         }
-        Toast.show(`${installments} parcelas cadastradas com sucesso!`, 'success');
       } else {
         const newTx = {
           id: Utils.generateId(),
