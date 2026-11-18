@@ -2296,12 +2296,12 @@ const App = {
           </div>
 
           <div class="text-right flex items-center gap-3 flex-shrink-0">
-            <div class="text-xs sm:text-sm font-extrabold ${Number(t.amount) === 0 ? 'text-amber-500' : (isPaid ? 'text-slate-500 line-through' : 'text-rose-600 dark:text-rose-400')}">
+            <button type="button" onclick="App.openEditModal('${t.id}')" title="Clique para alterar valor ou detalhes desta conta" class="text-right text-xs sm:text-sm font-extrabold hover:underline ${Number(t.amount) === 0 ? 'text-amber-500' : (isPaid ? 'text-slate-500 line-through' : 'text-rose-600 dark:text-rose-400')}">
               ${Number(t.amount) === 0 ? 'R$ 0,00 <span class="text-[10px] font-normal text-amber-600 dark:text-amber-300 block sm:inline">(Variável)</span>' : this.formatDisplayValue(t.amount)}
-            </div>
+            </button>
             ${actionButton}
             <div class="flex items-center">
-              <button type="button" onclick="App.openEditModal('${t.id}')" class="p-1 text-slate-400 hover:text-blue-600">
+              <button type="button" onclick="App.openEditModal('${t.id}')" title="Alterar valor ou detalhes desta conta" class="p-1 text-slate-400 hover:text-blue-600">
                 <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z"/></svg>
               </button>
             </div>
@@ -2416,11 +2416,33 @@ const App = {
     if (elHighName) elHighName.textContent = highest.description;
   },
 
+  getFutureRelatedTransactions(tx) {
+    if (!tx || !tx.date) return [];
+    return this.state.transactions.filter(t => {
+      if (t.id === tx.id) return false;
+      // 1. Se possuem o mesmo groupId
+      if (tx.groupId && t.groupId && t.groupId === tx.groupId) {
+        return t.date >= tx.date;
+      }
+      // 2. Se for repetição de mesma descrição, tipo e categoria com data futura
+      const cleanDesc = (tx.description || '').replace(/\s*\(\d+\/\d+\)$/, '').trim().toLowerCase();
+      const tCleanDesc = (t.description || '').replace(/\s*\(\d+\/\d+\)$/, '').trim().toLowerCase();
+      return (
+        cleanDesc.length > 0 &&
+        cleanDesc === tCleanDesc &&
+        t.type === tx.type &&
+        t.category === tx.category &&
+        t.date >= tx.date
+      );
+    });
+  },
+
   openTransactionModal(editId = null) {
     const modal = document.getElementById('modal-transaction');
     const form = document.getElementById('form-transaction');
     const title = document.getElementById('modal-transaction-title');
     const repeatWrapper = document.getElementById('tx-repeat-wrapper');
+    const scopeWrapper = document.getElementById('tx-edit-scope-wrapper');
     if (!modal || !form) return;
 
     form.reset();
@@ -2450,7 +2472,24 @@ const App = {
       document.getElementById('tx-account').value = tx.account || 'Conta Corrente';
       document.getElementById('tx-date').value = tx.date;
       document.getElementById('tx-status').value = tx.status;
+
+      // Verifica se existem outras contas vinculadas (repetições futuras)
+      const futureRelated = this.getFutureRelatedTransactions(tx);
+      if (scopeWrapper) {
+        if (futureRelated.length > 0) {
+          scopeWrapper.classList.remove('hidden');
+          const futureLabel = document.getElementById('tx-edit-scope-future-label');
+          if (futureLabel) {
+            futureLabel.textContent = `Alterar este e os próximos ${futureRelated.length} meses restantes`;
+          }
+          const singleRadio = document.querySelector('input[name="tx-edit-scope"][value="single"]');
+          if (singleRadio) singleRadio.checked = true;
+        } else {
+          scopeWrapper.classList.add('hidden');
+        }
+      }
     } else {
+      if (scopeWrapper) scopeWrapper.classList.add('hidden');
       if (title) title.textContent = 'Novo Lançamento';
       document.getElementById('tx-id').value = '';
       const today = new Date().toISOString().split('T')[0];
@@ -2542,22 +2581,64 @@ const App = {
     if (this.state.editingId) {
       const index = this.state.transactions.findIndex(t => t.id === this.state.editingId);
       if (index !== -1) {
-        this.state.transactions[index] = {
-          ...this.state.transactions[index],
-          description,
-          amount,
-          type,
-          category,
-          account,
-          date,
-          status,
-          updatedAt: Date.now()
-        };
-        Toast.show('Lançamento atualizado!', 'success');
+        const oldTx = this.state.transactions[index];
+        const editScope = document.querySelector('input[name="tx-edit-scope"]:checked')?.value || 'single';
+
+        if (editScope === 'future') {
+          const futureRelated = this.getFutureRelatedTransactions(oldTx);
+          const now = Date.now();
+
+          // Atualiza o item deste mês
+          this.state.transactions[index] = {
+            ...oldTx,
+            description,
+            amount,
+            type,
+            category,
+            account,
+            date,
+            status,
+            updatedAt: now
+          };
+
+          // Atualiza todos os meses futuros da mesma série
+          futureRelated.forEach((ft, i) => {
+            const fIndex = this.state.transactions.findIndex(t => t.id === ft.id);
+            if (fIndex !== -1) {
+              const isInstallment = ft.description.includes('(') && ft.description.includes('/');
+              this.state.transactions[fIndex] = {
+                ...this.state.transactions[fIndex],
+                description: isInstallment ? ft.description : description,
+                amount,
+                category,
+                account,
+                type,
+                updatedAt: now + i + 1
+              };
+            }
+          });
+
+          Toast.show(`Valor atualizado nesta conta e em mais ${futureRelated.length} meses futuros!`, 'success', 4000);
+        } else {
+          // Atualiza SOMENTE esta conta (deste mês)
+          this.state.transactions[index] = {
+            ...oldTx,
+            description,
+            amount,
+            type,
+            category,
+            account,
+            date,
+            status,
+            updatedAt: Date.now()
+          };
+          Toast.show('Valor atualizado somente para esta conta!', 'success');
+        }
       }
     } else {
       if (isRepeat && repeatCount > 1) {
         const now = Date.now();
+        const groupId = Utils.generateId();
         if (repeatMode === 'installment') {
           // Parcelamento (divide o valor total)
           const partAmount = Math.round((amount / repeatCount) * 100) / 100;
@@ -2565,6 +2646,7 @@ const App = {
             const installmentDate = Utils.addMonths(date, i);
             const newTx = {
               id: Utils.generateId(),
+              groupId,
               description: `${description} (${i + 1}/${repeatCount})`,
               amount: partAmount,
               type,
@@ -2583,6 +2665,7 @@ const App = {
             const repeatDate = Utils.addMonths(date, i);
             const newTx = {
               id: Utils.generateId(),
+              groupId,
               description,
               amount,
               type,
@@ -2639,6 +2722,22 @@ const App = {
     if (descEl) descEl.textContent = tx.description;
     if (valEl) valEl.textContent = Utils.formatCurrency(tx.amount);
 
+    const futureRelated = this.getFutureRelatedTransactions(tx);
+    const deleteScope = document.getElementById('delete-scope-wrapper');
+    if (deleteScope) {
+      if (futureRelated.length > 0) {
+        deleteScope.classList.remove('hidden');
+        const futureLabel = document.getElementById('delete-scope-future-label');
+        if (futureLabel) {
+          futureLabel.textContent = `Excluir este e os próximos ${futureRelated.length} meses restantes`;
+        }
+        const singleRadio = document.querySelector('input[name="delete-scope"][value="single"]');
+        if (singleRadio) singleRadio.checked = true;
+      } else {
+        deleteScope.classList.add('hidden');
+      }
+    }
+
     if (modal) {
       modal.classList.remove('hidden');
       modal.classList.add('flex');
@@ -2657,11 +2756,24 @@ const App = {
   executeDelete() {
     if (!this.state.deletingId) return;
 
-    this.markDeleted([this.state.deletingId]);
-    this.state.transactions = this.state.transactions.filter(t => t.id !== this.state.deletingId);
+    const tx = this.state.transactions.find(t => t.id === this.state.deletingId);
+    if (!tx) return;
+
+    const deleteScope = document.querySelector('input[name="delete-scope"]:checked')?.value || 'single';
+    if (deleteScope === 'future') {
+      const futureRelated = this.getFutureRelatedTransactions(tx);
+      const idsToDelete = [tx.id, ...futureRelated.map(t => t.id)];
+      this.markDeleted(idsToDelete);
+      this.state.transactions = this.state.transactions.filter(t => !idsToDelete.includes(t.id));
+      Toast.show(`${idsToDelete.length} lançamentos excluídos!`, 'info');
+    } else {
+      this.markDeleted([this.state.deletingId]);
+      this.state.transactions = this.state.transactions.filter(t => t.id !== this.state.deletingId);
+      Toast.show('Lançamento excluído.', 'info');
+    }
+
     this.saveAndSync();
     this.closeDeleteModal();
-    Toast.show('Lançamento excluído.', 'info');
   },
 
   toggleStatus(id) {

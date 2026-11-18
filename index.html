@@ -968,6 +968,35 @@
           </div>
         </div>
 
+        <!-- Opções de Edição para Lançamentos Recorrentes -->
+        <div id="tx-edit-scope-wrapper" class="hidden pt-2.5 border-t border-slate-100 dark:border-slate-800">
+          <div class="p-3 rounded-xl bg-blue-50/70 dark:bg-blue-950/30 border border-blue-200/70 dark:border-blue-900/50 space-y-2">
+            <div class="flex items-center gap-1.5 text-xs font-bold text-blue-900 dark:text-blue-200">
+              <span>🔄 Lançamento com repetições em outros meses</span>
+            </div>
+            <p class="text-[11px] text-slate-600 dark:text-slate-300">
+              Como deseja aplicar a alteração de valor deste lançamento?
+            </p>
+            <div class="space-y-1.5 pt-0.5">
+              <label class="flex items-start gap-2.5 p-2 rounded-lg bg-white dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 cursor-pointer hover:border-blue-500 text-xs transition-colors">
+                <input type="radio" name="tx-edit-scope" value="single" checked class="mt-0.5 text-blue-600 focus:ring-blue-500">
+                <div>
+                  <div class="font-bold text-slate-800 dark:text-slate-200">Alterar SOMENTE este mês (esta conta)</div>
+                  <div class="text-[10px] text-slate-500 dark:text-slate-400">Altera o valor apenas deste mês (ideal para contas variáveis como água, luz, mercado ou ajuste pontual).</div>
+                </div>
+              </label>
+
+              <label class="flex items-start gap-2.5 p-2 rounded-lg bg-white dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 cursor-pointer hover:border-blue-500 text-xs transition-colors">
+                <input type="radio" name="tx-edit-scope" value="future" class="mt-0.5 text-blue-600 focus:ring-blue-500">
+                <div>
+                  <div class="font-bold text-slate-800 dark:text-slate-200" id="tx-edit-scope-future-label">Alterar TODOS os meses restantes</div>
+                  <div class="text-[10px] text-slate-500 dark:text-slate-400">Aplica o novo valor nesta conta e em todas as próximas (ideal para reajuste de aluguel ou plano).</div>
+                </div>
+              </label>
+            </div>
+          </div>
+        </div>
+
         <div class="pt-3 border-t border-slate-200 dark:border-slate-800 flex items-center justify-end gap-2">
           <button id="btn-cancel-modal" type="button" class="px-4 py-2 text-xs font-semibold rounded-xl text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800">
             Cancelar
@@ -1031,6 +1060,24 @@
       <div class="mt-3 p-2.5 bg-slate-50 dark:bg-slate-800/60 rounded-xl border border-slate-200/80 dark:border-slate-700/60 text-left">
         <div id="delete-modal-description" class="font-semibold text-slate-800 dark:text-slate-200 text-xs truncate">...</div>
         <div id="delete-modal-amount" class="text-[11px] text-slate-400 mt-0.5">...</div>
+      </div>
+
+      <!-- Opção de excluir apenas este ou futuros -->
+      <div id="delete-scope-wrapper" class="hidden mt-3 text-left space-y-1.5 text-xs">
+        <label class="flex items-start gap-2 p-2 rounded-lg bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 cursor-pointer">
+          <input type="radio" name="delete-scope" value="single" checked class="mt-0.5 text-rose-600 focus:ring-rose-500">
+          <div>
+            <div class="font-bold text-slate-800 dark:text-slate-200">Excluir SOMENTE este mês</div>
+            <div class="text-[10px] text-slate-400">Mantém os outros meses intactos.</div>
+          </div>
+        </label>
+        <label class="flex items-start gap-2 p-2 rounded-lg bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 cursor-pointer">
+          <input type="radio" name="delete-scope" value="future" class="mt-0.5 text-rose-600 focus:ring-rose-500">
+          <div>
+            <div class="font-bold text-slate-800 dark:text-slate-200" id="delete-scope-future-label">Excluir este e TODOS os futuros</div>
+            <div class="text-[10px] text-slate-400">Remove a conta deste mês e de todos os meses seguintes.</div>
+          </div>
+        </label>
       </div>
 
       <div class="mt-5 flex items-center justify-center gap-2">
