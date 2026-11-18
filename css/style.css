@@ -1,5 +1,5 @@
 /* ==========================================================================
-   Controle Financeiro Pessoal - Estilos Customizados & Refinamentos
+   Controle Financeiro Pessoal - Estilos Customizados & Mobile-First
    ========================================================================== */
 
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap');
@@ -10,12 +10,34 @@
   --color-success: #10b981;
   --color-danger: #ef4444;
   --color-warning: #f59e0b;
+  --safe-bottom: env(safe-area-inset-bottom, 0px);
+  --safe-top: env(safe-area-inset-top, 0px);
+}
+
+html, body {
+  min-height: 100vh;
+  min-height: 100dvh;
+  margin: 0;
+  padding: 0;
+  overflow-x: hidden;
 }
 
 body {
   font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+  padding-top: var(--safe-top);
+}
+
+/* Espaçamento inferior para acomodar a Bottom Bar em mobile */
+.content-area-mobile {
+  padding-bottom: calc(5.25rem + var(--safe-bottom));
+}
+
+@media (min-width: 768px) {
+  .content-area-mobile {
+    padding-bottom: 2rem;
+  }
 }
 
 /* Transições suaves para tema */
@@ -29,33 +51,29 @@ html.transition-theme *:after {
 
 /* Scrollbar Personalizada */
 ::-webkit-scrollbar {
-  width: 8px;
-  height: 8px;
+  width: 6px;
+  height: 6px;
 }
 
 ::-webkit-scrollbar-track {
-  background: rgba(226, 232, 240, 0.6);
-}
-
-.dark ::-webkit-scrollbar-track {
-  background: rgba(30, 41, 59, 0.6);
+  background: transparent;
 }
 
 ::-webkit-scrollbar-thumb {
-  background: rgba(148, 163, 184, 0.7);
+  background: rgba(148, 163, 184, 0.5);
   border-radius: 9999px;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: rgba(100, 116, 139, 0.9);
+  background: rgba(100, 116, 139, 0.8);
 }
 
 .dark ::-webkit-scrollbar-thumb {
-  background: rgba(71, 85, 105, 0.8);
+  background: rgba(71, 85, 105, 0.6);
 }
 
 .dark ::-webkit-scrollbar-thumb:hover {
-  background: rgba(100, 116, 139, 1);
+  background: rgba(100, 116, 139, 0.9);
 }
 
 /* Animações e Micro-interações */
@@ -71,18 +89,14 @@ html.transition-theme *:after {
 }
 
 @keyframes modalBackdrop {
-  from {
-    opacity: 0;
-  }
-  to {
-    opacity: 1;
-  }
+  from { opacity: 0; }
+  to { opacity: 1; }
 }
 
 @keyframes modalScale {
   from {
     opacity: 0;
-    transform: scale(0.95) translateY(10px);
+    transform: scale(0.95) translateY(12px);
   }
   to {
     opacity: 1;
@@ -102,24 +116,20 @@ html.transition-theme *:after {
 }
 
 @keyframes pulseSubtle {
-  0%, 100% {
-    opacity: 1;
-  }
-  50% {
-    opacity: 0.75;
-  }
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.6; }
 }
 
 .animate-fade-in {
-  animation: fadeIn 0.3s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+  animation: fadeIn 0.25s cubic-bezier(0.16, 1, 0.3, 1) forwards;
 }
 
 .modal-backdrop-anim {
-  animation: modalBackdrop 0.25s ease-out forwards;
+  animation: modalBackdrop 0.2s ease-out forwards;
 }
 
 .modal-card-anim {
-  animation: modalScale 0.3s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+  animation: modalScale 0.25s cubic-bezier(0.16, 1, 0.3, 1) forwards;
 }
 
 .toast-anim {
@@ -130,13 +140,19 @@ html.transition-theme *:after {
   animation: pulseSubtle 2.5s infinite ease-in-out;
 }
 
-/* Glassmorphism sutil para cabeçalhos e painéis */
+/* Glassmorphism */
 .glass-header {
   backdrop-filter: blur(12px);
   -webkit-backdrop-filter: blur(12px);
 }
 
-/* Customização dos selects para visual uniforme */
+.glass-bottom-bar {
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  padding-bottom: max(0.5rem, var(--safe-bottom));
+}
+
+/* Customização dos selects */
 select {
   background-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 20 20'%3e%3cpath stroke='%2364748b' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.5' d='M6 8l4 4 4-4'/%3e%3c/svg%3e");
   background-position: right 0.65rem center;
@@ -166,15 +182,34 @@ input[type="number"] {
   -moz-appearance: textfield;
 }
 
-/* Estilo para drag and drop zone no modal de importação */
-.dropzone-active {
-  border-color: #2563eb !important;
-  background-color: rgba(37, 99, 235, 0.08) !important;
+/* Floating Action Button (FAB) */
+.fab-button {
+  box-shadow: 0 10px 25px -5px rgba(37, 99, 235, 0.4), 0 8px 10px -6px rgba(37, 99, 235, 0.3);
+  bottom: calc(4.75rem + var(--safe-bottom));
 }
 
-/* Responsividade de tabelas para telas pequenas */
-@media (max-width: 640px) {
-  .hide-on-mobile {
-    display: none;
+/* Estilo de abas ativas */
+.nav-tab-active {
+  color: #2563eb !important;
+  border-color: #2563eb !important;
+}
+
+.dark .nav-tab-active {
+  color: #60a5fa !important;
+  border-color: #60a5fa !important;
+}
+
+.bottom-tab-active {
+  color: #2563eb !important;
+}
+
+.dark .bottom-tab-active {
+  color: #60a5fa !important;
+}
+
+/* Toque móvel aprimorado */
+@media (max-width: 768px) {
+  button, select, input {
+    touch-action: manipulation;
   }
 }

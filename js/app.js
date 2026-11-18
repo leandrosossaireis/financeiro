@@ -93,25 +93,30 @@ const Utils = {
     return monthName.charAt(0).toUpperCase() + monthName.slice(1) + ' de ' + year;
   },
 
-  // Subtrair ou adicionar meses a uma string "YYYY-MM"
-  addMonths(yearMonthStr, count) {
-    const [y, m] = yearMonthStr.split('-').map(Number);
-    const d = new Date(y, m - 1 + count, 1);
+  // Subtrair ou adicionar meses a uma string "YYYY-MM" ou "YYYY-MM-DD"
+  addMonths(dateOrMonthStr, count) {
+    const parts = dateOrMonthStr.split('-');
+    const y = parseInt(parts[0], 10);
+    const m = parseInt(parts[1], 10);
+    const day = parts[2] ? parseInt(parts[2], 10) : 1;
+
+    const d = new Date(y, m - 1 + count, day);
     const ny = d.getFullYear();
     const nm = String(d.getMonth() + 1).padStart(2, '0');
+    if (parts.length === 3) {
+      const nd = String(d.getDate()).padStart(2, '0');
+      return `${ny}-${nm}-${nd}`;
+    }
     return `${ny}-${nm}`;
   }
 };
 
 /**
  * Camada de Persistência (Storage Service)
- * Suporta LocalStorage com tratamento de erros e validação de schema
  */
 const StorageService = {
-  // Fila de gravação: garante que escritas criptografadas (assíncronas) ocorram em ordem
   _queue: Promise.resolve(),
 
-  // Normaliza/valida a estrutura do banco de dados
   normalize(parsed) {
     if (!parsed || typeof parsed !== 'object' || !Array.isArray(parsed.transactions)) {
       console.warn('Estrutura de dados inválida. Inicializando padrão.');
@@ -126,7 +131,6 @@ const StorageService = {
     };
   },
 
-  // Lê dados antigos não criptografados (versões anteriores do app) para migração
   readLegacyPlain() {
     try {
       const raw = localStorage.getItem(STORAGE_KEY);
@@ -143,25 +147,23 @@ const StorageService = {
     try { localStorage.removeItem(STORAGE_KEY); } catch (e) { /* ignora */ }
   },
 
-  // Salva os dados criptografados no cofre (assíncrono, enfileirado)
   saveData(data) {
     const payload = {
       version: SCHEMA_VERSION,
       updatedAt: new Date().toISOString(),
       transactions: Array.isArray(data.transactions) ? data.transactions : [],
-      deleted: data.deleted || {},   // Exclusões (tombstones) para sincronização
-      settings: data.settings || {}  // Configurações locais (ex: sincronização)
+      deleted: data.deleted || {},
+      settings: data.settings || {}
     };
     this._queue = this._queue
       .then(() => CryptoVault.encryptAndStore(payload))
       .catch(err => {
-        console.error('Erro ao salvar dados criptografados (possível limite de cota):', err);
-        Toast.show('Erro ao salvar os dados. Faça um backup em JSON.', 'error');
+        console.error('Erro ao salvar dados criptografados:', err);
+        Toast.show('Erro ao salvar dados. Faça backup em JSON.', 'error');
       });
     return this._queue;
   },
 
-  // Aguarda todas as gravações pendentes
   flush() {
     return this._queue;
   },
@@ -172,11 +174,12 @@ const StorageService = {
       updatedAt: new Date().toISOString(),
       transactions: [],
       deleted: {},
-      settings: {}
+      settings: {
+        budgets: {}
+      }
     };
   },
 
-  // Remove TODOS os dados (cofre + legado)
   wipeAll() {
     try {
       localStorage.removeItem(VAULT_KEY);
@@ -190,9 +193,6 @@ const StorageService = {
 
 /**
  * Cofre Criptográfico (Web Crypto API)
- * - Chave derivada da senha via PBKDF2-SHA256 (310.000 iterações + salt aleatório)
- * - Dados cifrados com AES-256-GCM (confidencialidade + integridade)
- * - A senha e a chave NUNCA são gravadas; a chave existe apenas em memória enquanto desbloqueado
  */
 const CryptoVault = {
   key: null,
@@ -260,7 +260,6 @@ const CryptoVault = {
     return JSON.parse(new TextDecoder().decode(plain));
   },
 
-  // Cria um novo cofre (primeiro acesso ou troca de senha)
   async create(password, data) {
     this.salt = crypto.getRandomValues(new Uint8Array(16));
     this.iterations = PBKDF2_ITERATIONS;
@@ -268,7 +267,6 @@ const CryptoVault = {
     await this.encryptAndStore(data);
   },
 
-  // Desbloqueia o cofre existente. Lança erro com code BAD_PASSWORD se a senha estiver errada.
   async unlock(password) {
     const vault = this.readVault();
     const salt = this.fromB64(vault.salt);
@@ -290,8 +288,6 @@ const CryptoVault = {
     return StorageService.normalize(data);
   },
 
-  // Decifra um cofre externo (ex: da nuvem) com a senha e passa a usar o salt/chave dele.
-  // Usado para que todos os aparelhos compartilhem o mesmo salt. Lança erro se a senha não abrir.
   async adopt(password, vault) {
     const salt = this.fromB64(vault.salt);
     const iterations = vault.iterations || PBKDF2_ITERATIONS;
@@ -316,7 +312,7 @@ const CryptoVault = {
 
   async encryptAndStore(data) {
     if (!this.key || !this.salt) throw new Error('Cofre bloqueado.');
-    const iv = crypto.getRandomValues(new Uint8Array(12)); // IV único a cada gravação
+    const iv = crypto.getRandomValues(new Uint8Array(12));
     const encoded = new TextEncoder().encode(JSON.stringify(data));
     const cipher = await crypto.subtle.encrypt({ name: 'AES-GCM', iv }, this.key, encoded);
 
@@ -343,282 +339,7 @@ const CryptoVault = {
 };
 
 /**
- * Tela de Login / Criação de Senha e Bloqueio Automático
- */
-const AuthUI = {
-  mode: 'login', // 'setup' (primeiro acesso) | 'login'
-  failedAttempts: 0,
-  idleTimer: null,
-  busy: false,
-
-  el(id) {
-    return document.getElementById(id);
-  },
-
-  init() {
-    this.el('auth-form').addEventListener('submit', (e) => this.handleSubmit(e));
-    this.el('auth-toggle-visibility').addEventListener('click', () => this.toggleVisibility());
-    this.el('auth-forgot').addEventListener('click', () => this.handleForgot());
-    this.el('auth-restore-toggle').addEventListener('click', () => {
-      this.mode = this.mode === 'restore' ? 'setup' : 'restore';
-      this.clearError();
-      this.renderMode();
-      this.el(this.mode === 'restore' ? 'auth-token' : 'auth-password').focus();
-    });
-
-    // Mensagem pós-bloqueio (ex: inatividade)
-    const reason = sessionStorage.getItem(LOCK_REASON_KEY);
-    if (reason) {
-      sessionStorage.removeItem(LOCK_REASON_KEY);
-      const info = this.el('auth-info');
-      info.textContent = reason;
-      info.classList.remove('hidden');
-    }
-
-    if (!this.isCryptoAvailable()) return;
-
-    this.mode = CryptoVault.hasVault() ? 'login' : 'setup';
-    this.renderMode();
-    this.show();
-  },
-
-  isCryptoAvailable() {
-    if (CryptoVault.isSupported()) return true;
-    this.showError('Seu navegador não suporta a criptografia necessária (Web Crypto API). Acesse pelo endereço HTTPS do GitHub Pages ou use um navegador atualizado.');
-    this.el('auth-submit').disabled = true;
-    this.show();
-    return false;
-  },
-
-  renderMode() {
-    const isSetup = this.mode === 'setup';
-    const isRestore = this.mode === 'restore';
-    const titles = {
-      setup: 'Crie sua senha de acesso',
-      login: 'Bem-vindo de volta',
-      restore: 'Restaurar da nuvem'
-    };
-    const subtitles = {
-      setup: 'Seus dados financeiros serão criptografados com esta senha.',
-      login: 'Digite sua senha para desbloquear seus dados.',
-      restore: 'Informe seu token do GitHub e a mesma senha usada no outro aparelho.'
-    };
-    const labels = { setup: 'Criar senha e entrar', login: 'Desbloquear', restore: 'Restaurar e entrar' };
-
-    this.el('auth-title').textContent = titles[this.mode];
-    this.el('auth-subtitle').textContent = subtitles[this.mode];
-    this.el('auth-submit-label').textContent = labels[this.mode];
-    this.el('auth-confirm-wrapper').classList.toggle('hidden', !isSetup);
-    this.el('auth-token-wrapper').classList.toggle('hidden', !isRestore);
-    this.el('auth-setup-notice').classList.toggle('hidden', !isSetup);
-    this.el('auth-forgot').classList.toggle('hidden', this.mode !== 'login');
-    this.el('auth-restore-toggle').classList.toggle('hidden', this.mode === 'login');
-    this.el('auth-restore-toggle').textContent = isRestore
-      ? '← Criar uma nova senha neste aparelho'
-      : 'Já usa em outro aparelho? Restaurar da nuvem';
-    this.el('auth-password').setAttribute('autocomplete', isSetup ? 'new-password' : 'current-password');
-    this.el('auth-password-confirm').required = isSetup;
-  },
-
-  show() {
-    this.el('auth-screen').classList.remove('hidden');
-    this.el('app-root').classList.add('hidden');
-    setTimeout(() => this.el('auth-password').focus(), 50);
-  },
-
-  hide() {
-    this.el('auth-screen').classList.add('hidden');
-    this.el('app-root').classList.remove('hidden');
-  },
-
-  showError(msg) {
-    const el = this.el('auth-error');
-    el.textContent = msg;
-    el.classList.remove('hidden');
-  },
-
-  clearError() {
-    this.el('auth-error').classList.add('hidden');
-  },
-
-  setLoading(loading) {
-    this.busy = loading;
-    this.el('auth-submit').disabled = loading;
-    this.el('auth-spinner').classList.toggle('hidden', !loading);
-  },
-
-  toggleVisibility() {
-    const inputs = [this.el('auth-password'), this.el('auth-password-confirm')];
-    const show = inputs[0].type === 'password';
-    inputs.forEach(i => { i.type = show ? 'text' : 'password'; });
-    this.el('auth-toggle-visibility').setAttribute('aria-label', show ? 'Ocultar senha' : 'Mostrar senha');
-    this.el('auth-eye-open').classList.toggle('hidden', show);
-    this.el('auth-eye-closed').classList.toggle('hidden', !show);
-  },
-
-  async handleSubmit(e) {
-    e.preventDefault();
-    if (this.busy) return;
-    this.clearError();
-
-    const pwd = this.el('auth-password').value;
-
-    if (this.mode === 'restore') {
-      await this.handleRestore(pwd);
-      return;
-    }
-
-    if (this.mode === 'setup') {
-      const confirmPwd = this.el('auth-password-confirm').value;
-      if (pwd.length < MIN_PASSWORD_LENGTH) {
-        this.showError(`A senha deve ter no mínimo ${MIN_PASSWORD_LENGTH} caracteres.`);
-        return;
-      }
-      if (pwd !== confirmPwd) {
-        this.showError('As senhas não coincidem.');
-        return;
-      }
-
-      this.setLoading(true);
-      try {
-        // Migra dados antigos (não criptografados), se existirem
-        const legacy = StorageService.readLegacyPlain();
-        const initial = legacy || StorageService.getDefaultData();
-        await CryptoVault.create(pwd, initial);
-        StorageService.removeLegacyPlain();
-        this.onSuccess(initial, legacy
-          ? 'Senha criada! Seus dados existentes agora estão criptografados.'
-          : 'Senha criada! Seus dados serão salvos criptografados.');
-      } catch (err) {
-        console.error(err);
-        this.showError('Não foi possível criar o cofre: ' + err.message);
-      } finally {
-        this.setLoading(false);
-      }
-      return;
-    }
-
-    // Modo login
-    if (!pwd) {
-      this.showError('Digite sua senha.');
-      return;
-    }
-
-    this.setLoading(true);
-    try {
-      const data = await CryptoVault.unlock(pwd);
-      this.failedAttempts = 0;
-      this.onSuccess(data);
-    } catch (err) {
-      this.failedAttempts++;
-      // Atraso progressivo contra tentativas repetidas
-      const delay = Math.min(250 * Math.pow(2, this.failedAttempts), 8000);
-      await new Promise(r => setTimeout(r, delay));
-      this.showError(err.code === 'BAD_PASSWORD'
-        ? `Senha incorreta. (tentativa ${this.failedAttempts})`
-        : 'Não foi possível abrir os dados: ' + err.message);
-      this.el('auth-password').select();
-    } finally {
-      this.setLoading(false);
-    }
-  },
-
-  // Novo aparelho: baixa o cofre criptografado do Gist e abre com a senha
-  async handleRestore(pwd) {
-    const token = this.el('auth-token').value.trim();
-    if (!token) {
-      this.showError('Informe seu token do GitHub.');
-      return;
-    }
-    if (!pwd) {
-      this.showError('Digite a senha usada no outro aparelho.');
-      return;
-    }
-
-    this.setLoading(true);
-    try {
-      await GistAPI.validateToken(token);
-      const gistId = await GistAPI.findVaultGist(token);
-      const remoteRaw = gistId ? await GistAPI.readVault(token, gistId) : null;
-      if (!remoteRaw) {
-        throw new Error('Nenhum dado do FinControl encontrado nesta conta do GitHub. Ative a sincronização primeiro no outro aparelho.');
-      }
-
-      localStorage.setItem(VAULT_KEY, remoteRaw);
-      let data;
-      try {
-        data = await CryptoVault.unlock(pwd);
-      } catch (e) {
-        localStorage.removeItem(VAULT_KEY);
-        throw new Error(e.code === 'BAD_PASSWORD' ? 'Senha incorreta para os dados da nuvem.' : e.message);
-      }
-
-      data.settings = { ...(data.settings || {}), sync: { token, gistId } };
-      await StorageService.saveData(data);
-      StorageService.removeLegacyPlain();
-      this.el('auth-token').value = '';
-      this.onSuccess(data, 'Dados restaurados da nuvem! Sincronização ativada neste aparelho.');
-    } catch (err) {
-      console.error(err);
-      this.showError(err.message);
-    } finally {
-      this.setLoading(false);
-    }
-  },
-
-  onSuccess(data, message) {
-    this.el('auth-password').value = '';
-    this.el('auth-password-confirm').value = '';
-    this.el('auth-info').classList.add('hidden');
-    this.hide();
-    App.onUnlocked(data);
-    this.startIdleWatch();
-    if (message) Toast.show(message, 'success', 5000);
-  },
-
-  // Bloqueia: aguarda gravações, descarta a chave e recarrega a página (limpa a memória)
-  async lock(reason, opts = {}) {
-    try {
-      if (!opts.skipSync) await SyncService.flushPending();
-      await StorageService.flush();
-    } finally {
-      CryptoVault.lock();
-      if (reason) sessionStorage.setItem(LOCK_REASON_KEY, reason);
-      location.reload();
-    }
-  },
-
-  startIdleWatch() {
-    const reset = () => {
-      clearTimeout(this.idleTimer);
-      this.idleTimer = setTimeout(() => {
-        this.lock(`Sessão bloqueada automaticamente após ${AUTO_LOCK_MINUTES} minutos de inatividade.`);
-      }, AUTO_LOCK_MINUTES * 60 * 1000);
-    };
-    ['mousemove', 'keydown', 'click', 'touchstart', 'scroll'].forEach(ev => {
-      window.addEventListener(ev, reset, { passive: true });
-    });
-    reset();
-  },
-
-  handleForgot() {
-    const ok1 = confirm(
-      'Por segurança, NÃO existe recuperação de senha: os dados são criptografados com ela.\n\n' +
-      'A única opção é APAGAR todos os dados deste navegador e começar de novo ' +
-      '(você poderá importar um backup JSON depois).\n\nDeseja continuar?'
-    );
-    if (!ok1) return;
-    const ok2 = confirm('Confirma a exclusão DEFINITIVA de todos os lançamentos deste navegador?');
-    if (!ok2) return;
-
-    StorageService.wipeAll();
-    sessionStorage.setItem(LOCK_REASON_KEY, 'Dados apagados. Crie uma nova senha para começar.');
-    location.reload();
-  }
-};
-
-/**
- * Cliente mínimo da API de Gists do GitHub
+ * Cliente da API de Gists do GitHub
  */
 const GistAPI = {
   async request(token, path, options = {}) {
@@ -644,7 +365,7 @@ const GistAPI = {
       const messages = {
         401: 'Token do GitHub inválido ou expirado.',
         403: 'Token sem permissão de "gist" ou limite de requisições atingido.',
-        404: 'Gist de sincronização não encontrado (pode ter sido apagado).',
+        404: 'Gist de sincronização não encontrado.',
         422: 'Requisição rejeitada pelo GitHub.'
       };
       const err = new Error(messages[res.status] || `Erro do GitHub (HTTP ${res.status}).`);
@@ -658,7 +379,6 @@ const GistAPI = {
     return this.request(token, '/user');
   },
 
-  // Procura entre os gists do usuário aquele que contém o arquivo do cofre
   async findVaultGist(token) {
     for (let page = 1; page <= 10; page++) {
       const list = await this.request(token, `/gists?per_page=100&page=${page}`);
@@ -701,13 +421,10 @@ const GistAPI = {
 };
 
 /**
- * Serviço de Sincronização entre aparelhos
- * - O conteúdo enviado ao Gist é o cofre JÁ CRIPTOGRAFADO (o GitHub não consegue ler os dados)
- * - Mesclagem por lançamento: vence a versão com "updatedAt" mais recente;
- *   exclusões são registradas (tombstones) para não "ressuscitarem" em outro aparelho
+ * Serviço de Sincronização entre Aparelhos
  */
 const SyncService = {
-  status: 'off',       // off | pending | syncing | ok | error | offline
+  status: 'off',
   statusDetail: '',
   lastSync: null,
   debounceTimer: null,
@@ -748,7 +465,6 @@ const SyncService = {
     }, SYNC_INTERVAL_MS);
   },
 
-  // Agenda uma sincronização após alterações locais
   schedule() {
     if (!this.isEnabled()) return;
     clearTimeout(this.debounceTimer);
@@ -759,7 +475,6 @@ const SyncService = {
     }, SYNC_DEBOUNCE_MS);
   },
 
-  // Enfileira uma sincronização (nunca duas ao mesmo tempo)
   syncNow(opts = {}) {
     clearTimeout(this.debounceTimer);
     this.debounceTimer = null;
@@ -767,14 +482,12 @@ const SyncService = {
     return this.chain;
   },
 
-  // Antes de bloquear: envia alterações pendentes (com limite de tempo)
   async flushPending(timeoutMs = 5000) {
     if (!this.isEnabled()) return;
     const pending = this.debounceTimer ? this.syncNow({ silent: true }) : this.chain;
     await Promise.race([pending, new Promise(r => setTimeout(r, timeoutMs))]);
   },
 
-  // Envia o cofre local sem mesclar (usado após troca de senha)
   pushOnly() {
     clearTimeout(this.debounceTimer);
     this.debounceTimer = null;
@@ -815,7 +528,6 @@ const SyncService = {
         try {
           remoteData = await CryptoVault.decryptVault(remoteVault, CryptoVault.key);
         } catch (e) {
-          // A chave atual não abre a nuvem: a senha foi alterada em outro aparelho
           localStorage.setItem(VAULT_KEY, remoteRaw);
           await AuthUI.lock('A senha foi alterada em outro aparelho. Entre com a nova senha.', { skipSync: true });
           return;
@@ -835,7 +547,6 @@ const SyncService = {
           await GistAPI.updateGist(token, gistId, localStorage.getItem(VAULT_KEY));
         }
       } else {
-        // Arquivo ausente no gist: envia o cofre local
         await GistAPI.updateGist(token, gistId, localStorage.getItem(VAULT_KEY));
       }
 
@@ -849,7 +560,6 @@ const SyncService = {
     }
   },
 
-  // Mescla dois conjuntos de dados (local e remoto)
   merge(local, remote) {
     const now = Date.now();
     const ttl = TOMBSTONE_TTL_DAYS * 24 * 60 * 60 * 1000;
@@ -857,7 +567,7 @@ const SyncService = {
     const deleted = {};
     [remote.deleted || {}, local.deleted || {}].forEach(src => {
       Object.entries(src).forEach(([id, ts]) => {
-        if (now - ts > ttl) return; // descarta exclusões muito antigas
+        if (now - ts > ttl) return;
         deleted[id] = Math.max(deleted[id] || 0, ts);
       });
     });
@@ -869,17 +579,29 @@ const SyncService = {
     });
 
     const transactions = [...byId.values()].filter(tx => !(deleted[tx.id] && deleted[tx.id] >= (tx.updatedAt || 0)));
-    return { transactions, deleted };
+
+    // Mesclar orçamentos
+    const localBudgets = (local.settings && local.settings.budgets) || {};
+    const remoteBudgets = (remote.settings && remote.settings.budgets) || {};
+    const mergedBudgets = { ...remoteBudgets, ...localBudgets };
+
+    return {
+      transactions,
+      deleted,
+      settings: {
+        ...(local.settings || {}),
+        budgets: mergedBudgets
+      }
+    };
   },
 
-  // Assinatura simples para detectar se houve diferença
   signature(data) {
     const txs = (data.transactions || []).map(t => `${t.id}:${t.updatedAt || 0}`).sort().join('|');
     const del = Object.keys(data.deleted || {}).sort().join('|');
-    return txs + '#' + del;
+    const budgets = JSON.stringify((data.settings && data.settings.budgets) || {});
+    return txs + '#' + del + '#' + budgets;
   },
 
-  // Conecta este aparelho à nuvem (cria o gist ou mescla com o existente)
   async connect(token, password, overwrite) {
     if (!(await CryptoVault.verifyPassword(password))) {
       throw new Error('Senha atual incorreta.');
@@ -896,7 +618,7 @@ const SyncService = {
           remoteData = await CryptoVault.adopt(password, JSON.parse(remoteRaw));
         } catch (e) {
           if (!overwrite) {
-            throw new Error('Os dados da nuvem usam outra senha. Use neste aparelho a mesma senha do outro aparelho ou marque a opção de substituir os dados da nuvem.');
+            throw new Error('Os dados da nuvem usam outra senha. Use neste aparelho a mesma senha ou marque a opção de substituir.');
           }
         }
         if (remoteData) {
@@ -940,7 +662,7 @@ const SyncService = {
       syncing: 'Sincronizando...',
       ok: 'Sincronizado',
       error: 'Erro na sincronização',
-      offline: 'Sem conexão (sincroniza quando voltar)'
+      offline: 'Sem conexão (sincroniza ao voltar)'
     };
     const dotColors = {
       off: 'bg-slate-400',
@@ -974,10 +696,8 @@ const ThemeManager = {
     const savedTheme = localStorage.getItem(THEME_KEY);
     const prefersDark = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
     const isDark = savedTheme === 'dark' || (!savedTheme && prefersDark);
-
     this.applyTheme(isDark, false);
 
-    // Listener para preferência do sistema caso o usuário não tenha fixado
     window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', (e) => {
       if (!localStorage.getItem(THEME_KEY)) {
         this.applyTheme(e.matches, true);
@@ -1047,7 +767,6 @@ const ChartService = {
     const emptyState = document.getElementById('chartCategoryEmpty');
     if (!canvas) return;
 
-    // Apenas despesas do período
     const expenses = transactions.filter(t => t.type === 'expense');
 
     if (expenses.length === 0) {
@@ -1063,7 +782,6 @@ const ChartService = {
     canvas.classList.remove('hidden');
     if (emptyState) emptyState.classList.add('hidden');
 
-    // Agrupar por categoria
     const categoryTotals = {};
     expenses.forEach(t => {
       const cat = t.category || 'Outros';
@@ -1073,7 +791,6 @@ const ChartService = {
     const labels = Object.keys(categoryTotals);
     const data = Object.values(categoryTotals);
 
-    // Mapear cores
     const backgroundColors = labels.map(label => {
       const match = CATEGORIES.find(c => c.name.toLowerCase() === label.toLowerCase());
       return match ? match.color : '#94a3b8';
@@ -1107,8 +824,8 @@ const ChartService = {
             position: 'bottom',
             labels: {
               color: colors.text,
-              font: { family: 'Inter', size: 12 },
-              padding: 14,
+              font: { family: 'Inter', size: 11 },
+              padding: 10,
               usePointStyle: true,
               pointStyle: 'circle'
             }
@@ -1117,7 +834,7 @@ const ChartService = {
             backgroundColor: colors.tooltipBg,
             titleColor: colors.tooltipText,
             bodyColor: colors.tooltipText,
-            padding: 10,
+            padding: 8,
             cornerRadius: 8,
             callbacks: {
               label: function(context) {
@@ -1129,7 +846,7 @@ const ChartService = {
             }
           }
         },
-        cutout: '68%'
+        cutout: '66%'
       }
     });
   },
@@ -1138,7 +855,6 @@ const ChartService = {
     const canvas = document.getElementById('chartHistory');
     if (!canvas) return;
 
-    // Calcular os últimos 6 meses a partir do mês selecionado
     const months = [];
     for (let i = 5; i >= 0; i--) {
       months.push(Utils.addMonths(currentMonthStr, -i));
@@ -1178,32 +894,29 @@ const ChartService = {
             label: 'Receitas',
             data: incomeData,
             backgroundColor: '#10b981',
-            borderRadius: 6,
-            maxBarThickness: 28
+            borderRadius: 5,
+            maxBarThickness: 24
           },
           {
             label: 'Despesas',
             data: expenseData,
             backgroundColor: '#f43f5e',
-            borderRadius: 6,
-            maxBarThickness: 28
+            borderRadius: 5,
+            maxBarThickness: 24
           }
         ]
       },
       options: {
         responsive: true,
         maintainAspectRatio: false,
-        interaction: {
-          mode: 'index',
-          intersect: false
-        },
+        interaction: { mode: 'index', intersect: false },
         plugins: {
           legend: {
             position: 'top',
             align: 'end',
             labels: {
               color: colors.text,
-              font: { family: 'Inter', size: 12 },
+              font: { family: 'Inter', size: 11 },
               usePointStyle: true,
               pointStyle: 'circle'
             }
@@ -1212,7 +925,7 @@ const ChartService = {
             backgroundColor: colors.tooltipBg,
             titleColor: colors.tooltipText,
             bodyColor: colors.tooltipText,
-            padding: 10,
+            padding: 8,
             cornerRadius: 8,
             callbacks: {
               label: function(context) {
@@ -1224,21 +937,15 @@ const ChartService = {
         scales: {
           x: {
             grid: { display: false },
-            ticks: {
-              color: colors.text,
-              font: { family: 'Inter', size: 11 }
-            }
+            ticks: { color: colors.text, font: { family: 'Inter', size: 10 } }
           },
           y: {
             grid: { color: colors.grid, drawBorder: false },
             ticks: {
               color: colors.text,
-              font: { family: 'Inter', size: 11 },
+              font: { family: 'Inter', size: 10 },
               callback: function(val) {
-                if (val >= 1000) {
-                  return 'R$ ' + (val / 1000).toFixed(0) + 'k';
-                }
-                return 'R$ ' + val;
+                return val >= 1000 ? 'R$ ' + (val / 1000).toFixed(0) + 'k' : 'R$ ' + val;
               }
             }
           }
@@ -1248,7 +955,6 @@ const ChartService = {
   },
 
   updateThemeColors() {
-    // Re-renderizar gráficos para adotar as cores do novo tema
     if (App.state) {
       this.renderCategoryChart(App.getFilteredTransactions());
       this.renderHistoryChart(App.state.transactions, App.state.filters.month);
@@ -1265,31 +971,31 @@ const Toast = {
     if (!container) return;
 
     const toast = document.createElement('div');
-    toast.className = `toast-anim flex items-center gap-3 px-4 py-3 rounded-xl shadow-lg border text-sm font-medium text-white transition-all transform pointer-events-auto`;
+    toast.className = `toast-anim flex items-center gap-2.5 px-3.5 py-2.5 rounded-xl shadow-lg border text-xs sm:text-sm font-medium text-white transition-all transform pointer-events-auto`;
 
-    let bgClass = 'bg-slate-900 dark:bg-slate-800 border-slate-700';
+    let bgClass = 'bg-slate-900 border-slate-700';
     let iconSvg = '';
 
     if (type === 'success') {
       bgClass = 'bg-emerald-600 border-emerald-500';
-      iconSvg = `<svg class="w-5 h-5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg>`;
+      iconSvg = `<svg class="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg>`;
     } else if (type === 'error') {
       bgClass = 'bg-rose-600 border-rose-500';
-      iconSvg = `<svg class="w-5 h-5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>`;
+      iconSvg = `<svg class="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>`;
     } else if (type === 'warning') {
       bgClass = 'bg-amber-600 border-amber-500';
-      iconSvg = `<svg class="w-5 h-5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/></svg>`;
+      iconSvg = `<svg class="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/></svg>`;
     } else {
       bgClass = 'bg-blue-600 border-blue-500';
-      iconSvg = `<svg class="w-5 h-5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>`;
+      iconSvg = `<svg class="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>`;
     }
 
     toast.className += ` ${bgClass}`;
     toast.innerHTML = `
       ${iconSvg}
       <span class="flex-1">${Utils.escapeHtml(message)}</span>
-      <button type="button" class="text-white/80 hover:text-white ml-2 p-1 focus:outline-none" onclick="this.parentElement.remove()">
-        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
+      <button type="button" class="text-white/80 hover:text-white p-0.5" onclick="this.parentElement.remove()">
+        <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
       </button>
     `;
 
@@ -1297,14 +1003,264 @@ const Toast = {
 
     setTimeout(() => {
       toast.style.opacity = '0';
-      toast.style.transform = 'translateY(-10px)';
-      setTimeout(() => toast.remove(), 300);
+      toast.style.transform = 'translateY(-8px)';
+      setTimeout(() => toast.remove(), 250);
     }, duration);
   }
 };
 
 /**
- * Dados de Exemplo para Teste Imediato (Sample Data)
+ * Autenticação e Desbloqueio (AuthUI)
+ */
+const AuthUI = {
+  mode: 'login',
+  failedAttempts: 0,
+  idleTimer: null,
+  busy: false,
+
+  el(id) {
+    return document.getElementById(id);
+  },
+
+  init() {
+    this.el('auth-form').addEventListener('submit', (e) => this.handleSubmit(e));
+    this.el('auth-toggle-visibility').addEventListener('click', () => this.toggleVisibility());
+    this.el('auth-forgot').addEventListener('click', () => this.handleForgot());
+    this.el('auth-restore-toggle').addEventListener('click', () => {
+      this.mode = this.mode === 'restore' ? 'setup' : 'restore';
+      this.clearError();
+      this.renderMode();
+      this.el(this.mode === 'restore' ? 'auth-token' : 'auth-password').focus();
+    });
+
+    const reason = sessionStorage.getItem(LOCK_REASON_KEY);
+    if (reason) {
+      sessionStorage.removeItem(LOCK_REASON_KEY);
+      const info = this.el('auth-info');
+      info.textContent = reason;
+      info.classList.remove('hidden');
+    }
+
+    if (!this.isCryptoAvailable()) return;
+
+    this.mode = CryptoVault.hasVault() ? 'login' : 'setup';
+    this.renderMode();
+    this.show();
+  },
+
+  isCryptoAvailable() {
+    if (CryptoVault.isSupported()) return true;
+    this.showError('Navegador sem suporte a Web Crypto API.');
+    this.el('auth-submit').disabled = true;
+    this.show();
+    return false;
+  },
+
+  renderMode() {
+    const isSetup = this.mode === 'setup';
+    const isRestore = this.mode === 'restore';
+    const titles = { setup: 'Crie sua senha de acesso', login: 'Bem-vindo de volta', restore: 'Restaurar da nuvem' };
+    const subtitles = {
+      setup: 'Seus dados financeiros serão criptografados com esta senha.',
+      login: 'Digite sua senha para desbloquear seus dados.',
+      restore: 'Informe seu token do GitHub e a mesma senha do outro aparelho.'
+    };
+    const labels = { setup: 'Criar senha e entrar', login: 'Desbloquear', restore: 'Restaurar e entrar' };
+
+    this.el('auth-title').textContent = titles[this.mode];
+    this.el('auth-subtitle').textContent = subtitles[this.mode];
+    this.el('auth-submit-label').textContent = labels[this.mode];
+    this.el('auth-confirm-wrapper').classList.toggle('hidden', !isSetup);
+    this.el('auth-token-wrapper').classList.toggle('hidden', !isRestore);
+    this.el('auth-setup-notice').classList.toggle('hidden', !isSetup);
+    this.el('auth-forgot').classList.toggle('hidden', this.mode !== 'login');
+    this.el('auth-restore-toggle').classList.toggle('hidden', this.mode === 'login');
+    this.el('auth-restore-toggle').textContent = isRestore
+      ? '← Criar uma nova senha neste aparelho'
+      : 'Já usa em outro aparelho? Restaurar da nuvem';
+    this.el('auth-password').setAttribute('autocomplete', isSetup ? 'new-password' : 'current-password');
+    this.el('auth-password-confirm').required = isSetup;
+  },
+
+  show() {
+    this.el('auth-screen').classList.remove('hidden');
+    this.el('app-root').classList.add('hidden');
+    setTimeout(() => this.el('auth-password').focus(), 50);
+  },
+
+  hide() {
+    this.el('auth-screen').classList.add('hidden');
+    this.el('app-root').classList.remove('hidden');
+  },
+
+  showError(msg) {
+    const el = this.el('auth-error');
+    el.textContent = msg;
+    el.classList.remove('hidden');
+  },
+
+  clearError() {
+    this.el('auth-error').classList.add('hidden');
+  },
+
+  setLoading(loading) {
+    this.busy = loading;
+    this.el('auth-submit').disabled = loading;
+    this.el('auth-spinner').classList.toggle('hidden', !loading);
+  },
+
+  toggleVisibility() {
+    const inputs = [this.el('auth-password'), this.el('auth-password-confirm')];
+    const show = inputs[0].type === 'password';
+    inputs.forEach(i => { i.type = show ? 'text' : 'password'; });
+    this.el('auth-eye-open').classList.toggle('hidden', show);
+    this.el('auth-eye-closed').classList.toggle('hidden', !show);
+  },
+
+  async handleSubmit(e) {
+    e.preventDefault();
+    if (this.busy) return;
+    this.clearError();
+
+    const pwd = this.el('auth-password').value;
+
+    if (this.mode === 'restore') {
+      await this.handleRestore(pwd);
+      return;
+    }
+
+    if (this.mode === 'setup') {
+      const confirmPwd = this.el('auth-password-confirm').value;
+      if (pwd.length < MIN_PASSWORD_LENGTH) {
+        this.showError(`A senha deve ter no mínimo ${MIN_PASSWORD_LENGTH} caracteres.`);
+        return;
+      }
+      if (pwd !== confirmPwd) {
+        this.showError('As senhas não coincidem.');
+        return;
+      }
+
+      this.setLoading(true);
+      try {
+        const legacy = StorageService.readLegacyPlain();
+        const initial = legacy || StorageService.getDefaultData();
+        await CryptoVault.create(pwd, initial);
+        StorageService.removeLegacyPlain();
+        this.onSuccess(initial, 'Senha criada com sucesso!');
+      } catch (err) {
+        console.error(err);
+        this.showError('Não foi possível criar o cofre: ' + err.message);
+      } finally {
+        this.setLoading(false);
+      }
+      return;
+    }
+
+    // Modo login
+    if (!pwd) {
+      this.showError('Digite sua senha.');
+      return;
+    }
+
+    this.setLoading(true);
+    try {
+      const data = await CryptoVault.unlock(pwd);
+      this.failedAttempts = 0;
+      this.onSuccess(data);
+    } catch (err) {
+      this.failedAttempts++;
+      const delay = Math.min(250 * Math.pow(2, this.failedAttempts), 8000);
+      await new Promise(r => setTimeout(r, delay));
+      this.showError(err.code === 'BAD_PASSWORD' ? `Senha incorreta. (${this.failedAttempts})` : err.message);
+      this.el('auth-password').select();
+    } finally {
+      this.setLoading(false);
+    }
+  },
+
+  async handleRestore(pwd) {
+    const token = this.el('auth-token').value.trim();
+    if (!token || !pwd) {
+      this.showError('Informe o token do GitHub e a senha.');
+      return;
+    }
+
+    this.setLoading(true);
+    try {
+      await GistAPI.validateToken(token);
+      const gistId = await GistAPI.findVaultGist(token);
+      const remoteRaw = gistId ? await GistAPI.readVault(token, gistId) : null;
+      if (!remoteRaw) {
+        throw new Error('Nenhum dado do FinControl encontrado nesta conta do GitHub.');
+      }
+
+      localStorage.setItem(VAULT_KEY, remoteRaw);
+      let data;
+      try {
+        data = await CryptoVault.unlock(pwd);
+      } catch (e) {
+        localStorage.removeItem(VAULT_KEY);
+        throw new Error('Senha incorreta para os dados da nuvem.');
+      }
+
+      data.settings = { ...(data.settings || {}), sync: { token, gistId } };
+      await StorageService.saveData(data);
+      this.el('auth-token').value = '';
+      this.onSuccess(data, 'Dados restaurados da nuvem com sucesso!');
+    } catch (err) {
+      console.error(err);
+      this.showError(err.message);
+    } finally {
+      this.setLoading(false);
+    }
+  },
+
+  onSuccess(data, message) {
+    this.el('auth-password').value = '';
+    this.el('auth-password-confirm').value = '';
+    this.el('auth-info').classList.add('hidden');
+    this.hide();
+    App.onUnlocked(data);
+    this.startIdleWatch();
+    if (message) Toast.show(message, 'success', 5000);
+  },
+
+  async lock(reason, opts = {}) {
+    try {
+      if (!opts.skipSync) await SyncService.flushPending();
+      await StorageService.flush();
+    } finally {
+      CryptoVault.lock();
+      if (reason) sessionStorage.setItem(LOCK_REASON_KEY, reason);
+      location.reload();
+    }
+  },
+
+  startIdleWatch() {
+    const reset = () => {
+      clearTimeout(this.idleTimer);
+      this.idleTimer = setTimeout(() => {
+        this.lock(`Sessão bloqueada após ${AUTO_LOCK_MINUTES} minutos de inatividade.`);
+      }, AUTO_LOCK_MINUTES * 60 * 1000);
+    };
+    ['mousemove', 'keydown', 'click', 'touchstart', 'scroll'].forEach(ev => {
+      window.addEventListener(ev, reset, { passive: true });
+    });
+    reset();
+  },
+
+  handleForgot() {
+    if (!confirm('Por segurança, NÃO existe recuperação de senha: os dados são criptografados com ela.\n\nA única opção é APAGAR todos os dados deste navegador e começar de novo.\n\nDeseja continuar?')) return;
+    if (!confirm('Confirma a exclusão definitiva?')) return;
+
+    StorageService.wipeAll();
+    sessionStorage.setItem(LOCK_REASON_KEY, 'Dados apagados. Crie uma nova senha para começar.');
+    location.reload();
+  }
+};
+
+/**
+ * Dados de Exemplo
  */
 const SampleData = {
   generate(baseMonthStr) {
@@ -1312,47 +1268,31 @@ const SampleData = {
     const currentYear = now.getFullYear();
     const currentMonthNum = String(now.getMonth() + 1).padStart(2, '0');
     const baseMonth = baseMonthStr || `${currentYear}-${currentMonthNum}`;
-
     const prevMonth = Utils.addMonths(baseMonth, -1);
     const prevMonth2 = Utils.addMonths(baseMonth, -2);
-    const prevMonth3 = Utils.addMonths(baseMonth, -3);
 
     return [
-      // Mês Atual
-      { id: Utils.generateId(), description: 'Salário Mensal', amount: 6500.00, type: 'income', category: 'Salário', date: `${baseMonth}-05`, status: 'paid' },
-      { id: Utils.generateId(), description: 'Projeto Freelance Website', amount: 1850.00, type: 'income', category: 'Freelance', date: `${baseMonth}-12`, status: 'paid' },
-      { id: Utils.generateId(), description: 'Dividendos de Ações', amount: 240.50, type: 'income', category: 'Investimentos', date: `${baseMonth}-15`, status: 'paid' },
-      { id: Utils.generateId(), description: 'Consultoria Remota', amount: 1200.00, type: 'income', category: 'Freelance', date: `${baseMonth}-26`, status: 'pending' },
+      { id: Utils.generateId(), description: 'Salário Mensal', amount: 6500.00, type: 'income', category: 'Salário', account: 'Conta Corrente', date: `${baseMonth}-05`, status: 'paid' },
+      { id: Utils.generateId(), description: 'Projeto Freelance', amount: 1850.00, type: 'income', category: 'Freelance', account: 'Pix', date: `${baseMonth}-12`, status: 'paid' },
+      { id: Utils.generateId(), description: 'Dividendos FIIs', amount: 240.50, type: 'income', category: 'Investimentos', account: 'Investimentos', date: `${baseMonth}-15`, status: 'paid' },
+      { id: Utils.generateId(), description: 'Consultoria Remota', amount: 1200.00, type: 'income', category: 'Freelance', account: 'Pix', date: `${baseMonth}-26`, status: 'pending' },
 
-      { id: Utils.generateId(), description: 'Aluguel do Apartamento', amount: 2100.00, type: 'expense', category: 'Moradia', date: `${baseMonth}-08`, status: 'paid' },
-      { id: Utils.generateId(), description: 'Condomínio e IPTU', amount: 620.00, type: 'expense', category: 'Moradia', date: `${baseMonth}-10`, status: 'paid' },
-      { id: Utils.generateId(), description: 'Compras de Supermercado', amount: 840.30, type: 'expense', category: 'Alimentação', date: `${baseMonth}-07`, status: 'paid' },
-      { id: Utils.generateId(), description: 'Jantar Restaurante Italiano', amount: 180.00, type: 'expense', category: 'Alimentação', date: `${baseMonth}-14`, status: 'paid' },
-      { id: Utils.generateId(), description: 'Combustível Posto Ipiranga', amount: 250.00, type: 'expense', category: 'Transporte', date: `${baseMonth}-11`, status: 'paid' },
-      { id: Utils.generateId(), description: 'Uber e Estacionamento', amount: 95.40, type: 'expense', category: 'Transporte', date: `${baseMonth}-16`, status: 'paid' },
-      { id: Utils.generateId(), description: 'Farmácia e Vitaminas', amount: 145.90, type: 'expense', category: 'Saúde', date: `${baseMonth}-18`, status: 'paid' },
-      { id: Utils.generateId(), description: 'Assinaturas de Streaming', amount: 89.90, type: 'expense', category: 'Lazer', date: `${baseMonth}-20`, status: 'paid' },
-      { id: Utils.generateId(), description: 'Curso de Especialização', amount: 350.00, type: 'expense', category: 'Educação', date: `${baseMonth}-22`, status: 'pending' },
-      { id: Utils.generateId(), description: 'Manutenção Veicular', amount: 480.00, type: 'expense', category: 'Transporte', date: `${baseMonth}-27`, status: 'pending' },
+      { id: Utils.generateId(), description: 'Aluguel do Apartamento', amount: 2100.00, type: 'expense', category: 'Moradia', account: 'Conta Corrente', date: `${baseMonth}-08`, status: 'paid' },
+      { id: Utils.generateId(), description: 'Condomínio e IPTU', amount: 620.00, type: 'expense', category: 'Moradia', account: 'Boleto', date: `${baseMonth}-10`, status: 'paid' },
+      { id: Utils.generateId(), description: 'Supermercado Mensal', amount: 840.30, type: 'expense', category: 'Alimentação', account: 'Cartão de Crédito', date: `${baseMonth}-07`, status: 'paid' },
+      { id: Utils.generateId(), description: 'Jantar Restaurante', amount: 180.00, type: 'expense', category: 'Alimentação', account: 'Pix', date: `${baseMonth}-14`, status: 'paid' },
+      { id: Utils.generateId(), description: 'Combustível Posto', amount: 250.00, type: 'expense', category: 'Transporte', account: 'Cartão de Crédito', date: `${baseMonth}-11`, status: 'paid' },
+      { id: Utils.generateId(), description: 'Farmácia e Medicamentos', amount: 145.90, type: 'expense', category: 'Saúde', account: 'Cartão de Crédito', date: `${baseMonth}-18`, status: 'paid' },
+      { id: Utils.generateId(), description: 'Streaming e Assinaturas', amount: 89.90, type: 'expense', category: 'Lazer', account: 'Cartão de Crédito', date: `${baseMonth}-20`, status: 'paid' },
+      { id: Utils.generateId(), description: 'Curso de Especialização', amount: 350.00, type: 'expense', category: 'Educação', account: 'Boleto', date: `${baseMonth}-22`, status: 'pending' },
 
-      // Mês Anterior (-1)
-      { id: Utils.generateId(), description: 'Salário Mensal', amount: 6500.00, type: 'income', category: 'Salário', date: `${prevMonth}-05`, status: 'paid' },
-      { id: Utils.generateId(), description: 'Freelance Design', amount: 1400.00, type: 'income', category: 'Freelance', date: `${prevMonth}-15`, status: 'paid' },
-      { id: Utils.generateId(), description: 'Aluguel do Apartamento', amount: 2100.00, type: 'expense', category: 'Moradia', date: `${prevMonth}-08`, status: 'paid' },
-      { id: Utils.generateId(), description: 'Supermercado Mês', amount: 1120.00, type: 'expense', category: 'Alimentação', date: `${prevMonth}-12`, status: 'paid' },
-      { id: Utils.generateId(), description: 'Manutenção Elétrica', amount: 340.00, type: 'expense', category: 'Moradia', date: `${prevMonth}-18`, status: 'paid' },
+      // Meses Anteriores
+      { id: Utils.generateId(), description: 'Salário Mensal', amount: 6500.00, type: 'income', category: 'Salário', account: 'Conta Corrente', date: `${prevMonth}-05`, status: 'paid' },
+      { id: Utils.generateId(), description: 'Aluguel', amount: 2100.00, type: 'expense', category: 'Moradia', account: 'Conta Corrente', date: `${prevMonth}-08`, status: 'paid' },
+      { id: Utils.generateId(), description: 'Supermercado', amount: 980.00, type: 'expense', category: 'Alimentação', account: 'Cartão de Crédito', date: `${prevMonth}-12`, status: 'paid' },
 
-      // 2 Meses Atrás (-2)
-      { id: Utils.generateId(), description: 'Salário Mensal', amount: 6500.00, type: 'income', category: 'Salário', date: `${prevMonth2}-05`, status: 'paid' },
-      { id: Utils.generateId(), description: 'Aluguel do Apartamento', amount: 2100.00, type: 'expense', category: 'Moradia', date: `${prevMonth2}-08`, status: 'paid' },
-      { id: Utils.generateId(), description: 'Supermercado', amount: 980.00, type: 'expense', category: 'Alimentação', date: `${prevMonth2}-11`, status: 'paid' },
-      { id: Utils.generateId(), description: 'Revisão Carro', amount: 650.00, type: 'expense', category: 'Transporte', date: `${prevMonth2}-22`, status: 'paid' },
-
-      // 3 Meses Atrás (-3)
-      { id: Utils.generateId(), description: 'Salário Mensal', amount: 6500.00, type: 'income', category: 'Salário', date: `${prevMonth3}-05`, status: 'paid' },
-      { id: Utils.generateId(), description: 'Bônus Performance', amount: 2000.00, type: 'income', category: 'Salário', date: `${prevMonth3}-10`, status: 'paid' },
-      { id: Utils.generateId(), description: 'Aluguel do Apartamento', amount: 2100.00, type: 'expense', category: 'Moradia', date: `${prevMonth3}-08`, status: 'paid' },
-      { id: Utils.generateId(), description: 'Viagem de Fim de Semana', amount: 1450.00, type: 'expense', category: 'Lazer', date: `${prevMonth3}-18`, status: 'paid' }
+      { id: Utils.generateId(), description: 'Salário Mensal', amount: 6500.00, type: 'income', category: 'Salário', account: 'Conta Corrente', date: `${prevMonth2}-05`, status: 'paid' },
+      { id: Utils.generateId(), description: 'Aluguel', amount: 2100.00, type: 'expense', category: 'Moradia', account: 'Conta Corrente', date: `${prevMonth2}-08`, status: 'paid' }
     ];
   }
 };
@@ -1370,38 +1310,47 @@ const App = {
       status: 'all',
       search: ''
     },
+    currentTab: 'overview',
+    hideValues: false,
     editingId: null,
     deletingId: null,
-    deleted: {},   // { idDoLançamento: timestampDaExclusão } - usado na sincronização
-    settings: {}   // Configurações (ex: sync) - salvas criptografadas
+    deleted: {},
+    settings: {
+      budgets: {
+        'Alimentação': 1200,
+        'Moradia': 2800,
+        'Transporte': 500,
+        'Lazer': 400
+      }
+    }
   },
 
   init() {
     ThemeManager.init();
     this.populateCategorySelects();
     this.setupEventListeners();
-
-    // Nenhum dado é carregado antes da autenticação
     AuthUI.init();
   },
 
-  // Chamado pelo AuthUI após desbloqueio bem-sucedido
   onUnlocked(data) {
     this.state.transactions = data.transactions || [];
     this.state.deleted = data.deleted || {};
     this.state.settings = data.settings || {};
+    if (!this.state.settings.budgets) {
+      this.state.settings.budgets = {};
+    }
+
     this.updateMonthSelector();
     this.render();
     SyncService.init();
 
     if (this.state.transactions.length === 0 && !SyncService.isEnabled()) {
       setTimeout(() => {
-        Toast.show('Bem-vindo! Clique em "Dados de Exemplo" para explorar a interface.', 'info', 5000);
+        Toast.show('Bem-vindo! Clique em "Dados de Exemplo" para explorar.', 'info', 5000);
       }, 700);
     }
   },
 
-  // Dados completos a serem persistidos (criptografados)
   getPersistPayload() {
     return {
       version: SCHEMA_VERSION,
@@ -1411,162 +1360,178 @@ const App = {
     };
   },
 
-  // Aplica dados vindos da sincronização
   applySyncedData(merged) {
     this.state.transactions = merged.transactions;
     this.state.deleted = merged.deleted;
+    if (merged.settings && merged.settings.budgets) {
+      this.state.settings.budgets = merged.settings.budgets;
+    }
     this.render();
   },
 
-  // Registra exclusões para que sejam propagadas aos outros aparelhos
   markDeleted(ids) {
     const now = Date.now();
     ids.forEach(id => { this.state.deleted[id] = now; });
   },
 
+  // Alternância de Abas (Tabs)
+  switchTab(tabId) {
+    this.state.currentTab = tabId;
+
+    ['overview', 'transactions', 'reports', 'budgets'].forEach(tab => {
+      const section = document.getElementById(`tab-${tab}`);
+      if (section) section.classList.toggle('hidden', tab !== tabId);
+
+      // Desktop nav styling
+      const desktopBtn = document.querySelector(`[data-tab-btn="${tab}"]`);
+      if (desktopBtn) {
+        if (tab === tabId) {
+          desktopBtn.className = 'px-3 py-1.5 rounded-lg transition-colors nav-tab-active bg-white dark:bg-slate-900 shadow-sm text-blue-600 dark:text-blue-400 font-bold';
+        } else {
+          desktopBtn.className = 'px-3 py-1.5 rounded-lg hover:text-slate-900 dark:hover:text-white transition-colors';
+        }
+      }
+
+      // Mobile bottom nav styling
+      const bottomBtn = document.querySelector(`[data-bottom-tab="${tab}"]`);
+      if (bottomBtn) {
+        if (tab === tabId) {
+          bottomBtn.className = 'flex flex-col items-center justify-center flex-1 h-full bottom-tab-active text-blue-600 dark:text-blue-400 font-bold';
+        } else {
+          bottomBtn.className = 'flex flex-col items-center justify-center flex-1 h-full text-slate-400 dark:text-slate-500 hover:text-slate-700';
+        }
+      }
+    });
+
+    if (tabId === 'reports') {
+      const filtered = this.getFilteredTransactions();
+      ChartService.renderCategoryChart(filtered);
+      ChartService.renderHistoryChart(this.state.transactions, this.state.filters.month);
+      this.renderAnalytics(filtered);
+    } else if (tabId === 'budgets') {
+      this.renderBudgets();
+    }
+
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  },
+
+  // Alternar visualização dos valores (Olho)
+  toggleHideValues() {
+    this.state.hideValues = !this.state.hideValues;
+    const openIcon = document.getElementById('eye-icon-open');
+    const closedIcon = document.getElementById('eye-icon-closed');
+
+    if (openIcon && closedIcon) {
+      openIcon.classList.toggle('hidden', this.state.hideValues);
+      closedIcon.classList.toggle('hidden', !this.state.hideValues);
+    }
+
+    this.render();
+    Toast.show(this.state.hideValues ? 'Valores ocultados' : 'Valores visíveis', 'info', 1500);
+  },
+
+  formatDisplayValue(amount, prefix = '') {
+    if (this.state.hideValues) {
+      return '••••••';
+    }
+    return prefix + Utils.formatCurrency(amount);
+  },
+
   setupEventListeners() {
-    // Toggle de tema
-    const btnTheme = document.getElementById('btn-theme-toggle');
-    if (btnTheme) {
-      btnTheme.addEventListener('click', () => {
-        ThemeManager.toggle();
-        ChartService.updateThemeColors();
-      });
-    }
+    // Tema
+    document.getElementById('btn-theme-toggle')?.addEventListener('click', () => {
+      ThemeManager.toggle();
+      ChartService.updateThemeColors();
+    });
 
-    // Modal de Transação (Abrir / Fechar)
-    const btnNewTransaction = document.getElementById('btn-new-transaction');
-    if (btnNewTransaction) {
-      btnNewTransaction.addEventListener('click', () => this.openTransactionModal());
-    }
+    // Ocultar/Mostrar valores
+    document.getElementById('btn-toggle-visibility-values')?.addEventListener('click', () => {
+      this.toggleHideValues();
+    });
 
-    const btnCloseModal = document.getElementById('btn-close-modal');
-    const btnCancelModal = document.getElementById('btn-cancel-modal');
-    if (btnCloseModal) btnCloseModal.addEventListener('click', () => this.closeTransactionModal());
-    if (btnCancelModal) btnCancelModal.addEventListener('click', () => this.closeTransactionModal());
+    // Modais Transação
+    document.getElementById('btn-new-transaction')?.addEventListener('click', () => this.openTransactionModal());
+    document.getElementById('btn-close-modal')?.addEventListener('click', () => this.closeTransactionModal());
+    document.getElementById('btn-cancel-modal')?.addEventListener('click', () => this.closeTransactionModal());
+    document.getElementById('form-transaction')?.addEventListener('submit', (e) => this.handleTransactionSubmit(e));
 
-    // Formulário de Transação (Submit)
-    const formTx = document.getElementById('form-transaction');
-    if (formTx) {
-      formTx.addEventListener('submit', (e) => this.handleTransactionSubmit(e));
-    }
+    // Checkbox de Repetição no Modal
+    document.getElementById('tx-repeat-checkbox')?.addEventListener('change', (e) => {
+      const fields = document.getElementById('tx-repeat-fields');
+      if (fields) fields.classList.toggle('hidden', !e.target.checked);
+    });
 
     // Navegação de Mês
-    const btnPrevMonth = document.getElementById('btn-prev-month');
-    const btnNextMonth = document.getElementById('btn-next-month');
-    const selectMonth = document.getElementById('filter-month');
+    document.getElementById('btn-prev-month')?.addEventListener('click', () => {
+      this.state.filters.month = Utils.addMonths(this.state.filters.month, -1);
+      this.updateMonthSelector();
+      this.render();
+    });
 
-    if (btnPrevMonth) {
-      btnPrevMonth.addEventListener('click', () => {
-        this.state.filters.month = Utils.addMonths(this.state.filters.month, -1);
-        this.updateMonthSelector();
-        this.render();
-      });
-    }
+    document.getElementById('btn-next-month')?.addEventListener('click', () => {
+      this.state.filters.month = Utils.addMonths(this.state.filters.month, 1);
+      this.updateMonthSelector();
+      this.render();
+    });
 
-    if (btnNextMonth) {
-      btnNextMonth.addEventListener('click', () => {
-        this.state.filters.month = Utils.addMonths(this.state.filters.month, 1);
-        this.updateMonthSelector();
-        this.render();
-      });
-    }
-
-    if (selectMonth) {
-      selectMonth.addEventListener('change', (e) => {
-        this.state.filters.month = e.target.value;
-        this.updateMonthTitle();
-        this.render();
-      });
-    }
+    document.getElementById('filter-month')?.addEventListener('change', (e) => {
+      this.state.filters.month = e.target.value;
+      this.updateMonthTitle();
+      this.render();
+    });
 
     // Filtros
-    const filterType = document.getElementById('filter-type');
-    const filterCategory = document.getElementById('filter-category');
-    const filterStatus = document.getElementById('filter-status');
-    const filterSearch = document.getElementById('filter-search');
-    const btnClearFilters = document.getElementById('btn-clear-filters');
+    document.getElementById('filter-category')?.addEventListener('change', (e) => {
+      this.state.filters.category = e.target.value;
+      this.render();
+    });
 
-    if (filterType) {
-      filterType.addEventListener('change', (e) => {
-        this.state.filters.type = e.target.value;
-        this.render();
-      });
-    }
+    document.getElementById('filter-status')?.addEventListener('change', (e) => {
+      this.state.filters.status = e.target.value;
+      this.render();
+    });
 
-    if (filterCategory) {
-      filterCategory.addEventListener('change', (e) => {
-        this.state.filters.category = e.target.value;
-        this.render();
-      });
-    }
+    document.getElementById('filter-search')?.addEventListener('input', (e) => {
+      this.state.filters.search = e.target.value.trim().toLowerCase();
+      this.render();
+    });
 
-    if (filterStatus) {
-      filterStatus.addEventListener('change', (e) => {
-        this.state.filters.status = e.target.value;
-        this.render();
-      });
-    }
+    document.getElementById('btn-clear-filters')?.addEventListener('click', () => this.clearFilters());
 
-    if (filterSearch) {
-      filterSearch.addEventListener('input', (e) => {
-        this.state.filters.search = e.target.value.trim().toLowerCase();
-        this.render();
-      });
-    }
+    // Backups
+    document.getElementById('btn-export-json')?.addEventListener('click', () => this.exportJSON());
+    document.getElementById('btn-export-csv')?.addEventListener('click', () => this.exportCSV());
+    document.getElementById('btn-import-json')?.addEventListener('click', () => this.openImportModal());
+    document.getElementById('btn-load-sample')?.addEventListener('click', () => this.loadSampleData());
+    document.getElementById('btn-clear-all')?.addEventListener('click', () => this.confirmClearAll());
 
-    if (btnClearFilters) {
-      btnClearFilters.addEventListener('click', () => this.clearFilters());
-    }
+    // Segurança
+    document.getElementById('btn-lock')?.addEventListener('click', () => AuthUI.lock('Sessão bloqueada.'));
+    document.getElementById('btn-change-password')?.addEventListener('click', () => this.openPasswordModal());
+    document.getElementById('form-password')?.addEventListener('submit', (e) => this.handleChangePassword(e));
+    document.getElementById('btn-cancel-password')?.addEventListener('click', () => this.closePasswordModal());
 
-    // Botões de Backup / Portabilidade
-    const btnExportJson = document.getElementById('btn-export-json');
-    const btnExportCsv = document.getElementById('btn-export-csv');
-    const btnImportJson = document.getElementById('btn-import-json');
-    const btnLoadSample = document.getElementById('btn-load-sample');
-    const btnClearAll = document.getElementById('btn-clear-all');
+    // Sincronização
+    document.getElementById('btn-sync')?.addEventListener('click', () => this.openSyncModal());
+    document.getElementById('btn-close-sync')?.addEventListener('click', () => this.closeSyncModal());
+    document.getElementById('btn-sync-connect')?.addEventListener('click', () => this.handleSyncConnect());
+    document.getElementById('btn-sync-now')?.addEventListener('click', () => SyncService.syncNow({ silent: false }));
+    document.getElementById('btn-sync-disconnect')?.addEventListener('click', () => this.handleSyncDisconnect());
 
-    if (btnExportJson) btnExportJson.addEventListener('click', () => this.exportJSON());
-    if (btnExportCsv) btnExportCsv.addEventListener('click', () => this.exportCSV());
-    if (btnImportJson) btnImportJson.addEventListener('click', () => this.openImportModal());
-    if (btnLoadSample) btnLoadSample.addEventListener('click', () => this.loadSampleData());
-    if (btnClearAll) btnClearAll.addEventListener('click', () => this.confirmClearAll());
+    // Exclusão
+    document.getElementById('btn-cancel-delete')?.addEventListener('click', () => this.closeDeleteModal());
+    document.getElementById('btn-confirm-delete')?.addEventListener('click', () => this.executeDelete());
 
-    // Segurança: bloquear sessão e alterar senha
-    const btnLock = document.getElementById('btn-lock');
-    const btnChangePassword = document.getElementById('btn-change-password');
-    const formPassword = document.getElementById('form-password');
-    const btnCancelPassword = document.getElementById('btn-cancel-password');
+    // Importação
+    document.getElementById('btn-close-import')?.addEventListener('click', () => this.closeImportModal());
+    document.getElementById('btn-cancel-import')?.addEventListener('click', () => this.closeImportModal());
+    document.getElementById('btn-process-import')?.addEventListener('click', () => this.handleImportSubmit());
 
-    if (btnLock) btnLock.addEventListener('click', () => AuthUI.lock('Sessão bloqueada.'));
-    if (btnChangePassword) btnChangePassword.addEventListener('click', () => this.openPasswordModal());
-    if (formPassword) formPassword.addEventListener('submit', (e) => this.handleChangePassword(e));
-    if (btnCancelPassword) btnCancelPassword.addEventListener('click', () => this.closePasswordModal());
+    // Modal de Orçamento
+    document.getElementById('form-budget')?.addEventListener('submit', (e) => this.handleBudgetSubmit(e));
+    document.getElementById('btn-cancel-budget')?.addEventListener('click', () => this.closeBudgetModal());
 
-    // Sincronização entre aparelhos
-    document.getElementById('btn-sync').addEventListener('click', () => this.openSyncModal());
-    document.getElementById('btn-close-sync').addEventListener('click', () => this.closeSyncModal());
-    document.getElementById('btn-sync-connect').addEventListener('click', () => this.handleSyncConnect());
-    document.getElementById('btn-sync-now').addEventListener('click', () => SyncService.syncNow({ silent: false }));
-    document.getElementById('btn-sync-disconnect').addEventListener('click', () => this.handleSyncDisconnect());
-
-    // Modal de Confirmação de Exclusão
-    const btnCancelDelete = document.getElementById('btn-cancel-delete');
-    const btnConfirmDelete = document.getElementById('btn-confirm-delete');
-    if (btnCancelDelete) btnCancelDelete.addEventListener('click', () => this.closeDeleteModal());
-    if (btnConfirmDelete) btnConfirmDelete.addEventListener('click', () => this.executeDelete());
-
-    // Modal de Importação
-    const btnCloseImport = document.getElementById('btn-close-import');
-    const btnCancelImport = document.getElementById('btn-cancel-import');
-    const btnProcessImport = document.getElementById('btn-process-import');
-    const importFileInput = document.getElementById('import-file-input');
-
-    if (btnCloseImport) btnCloseImport.addEventListener('click', () => this.closeImportModal());
-    if (btnCancelImport) btnCancelImport.addEventListener('click', () => this.closeImportModal());
-    if (btnProcessImport) btnProcessImport.addEventListener('click', () => this.handleImportSubmit());
-
-    // Fechar modais ao teclar Escape ou clicar no backdrop
+    // Fechar modais com Escape
     window.addEventListener('keydown', (e) => {
       if (e.key === 'Escape') {
         this.closeTransactionModal();
@@ -1574,27 +1539,13 @@ const App = {
         this.closeImportModal();
         this.closePasswordModal();
         this.closeSyncModal();
-      }
-    });
-
-    ['modal-transaction', 'modal-delete', 'modal-import', 'modal-password', 'modal-sync'].forEach(id => {
-      const el = document.getElementById(id);
-      if (el) {
-        el.addEventListener('click', (e) => {
-          if (e.target === el) {
-            this.closeTransactionModal();
-            this.closeDeleteModal();
-            this.closeImportModal();
-            this.closePasswordModal();
-            this.closeSyncModal();
-          }
-        });
+        this.closeBudgetModal();
       }
     });
   },
 
   populateCategorySelects() {
-    const selects = ['tx-category', 'filter-category'];
+    const selects = ['tx-category', 'filter-category', 'budget-category'];
     selects.forEach(selectId => {
       const el = document.getElementById(selectId);
       if (!el) return;
@@ -1614,13 +1565,11 @@ const App = {
     const selectMonth = document.getElementById('filter-month');
     if (!selectMonth) return;
 
-    // Gerar opções de meses: 12 meses antes e 6 meses depois do atual
     const currentM = Utils.getCurrentMonth();
     const options = [];
 
     for (let i = -12; i <= 6; i++) {
-      const mStr = Utils.addMonths(currentM, i);
-      options.push(mStr);
+      options.push(Utils.addMonths(currentM, i));
     }
 
     if (!options.includes(this.state.filters.month)) {
@@ -1643,30 +1592,46 @@ const App = {
     }
   },
 
+  setFilterType(type) {
+    this.state.filters.type = type;
+    const chips = ['all', 'income', 'expense'];
+    chips.forEach(c => {
+      const btn = document.querySelector(`[data-type-chip="${c}"]`);
+      if (btn) {
+        if (c === type) {
+          btn.className = 'px-3 py-1 rounded-full font-semibold bg-blue-600 text-white whitespace-nowrap';
+        } else {
+          btn.className = 'px-3 py-1 rounded-full font-semibold bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-200 whitespace-nowrap';
+        }
+      }
+    });
+    this.render();
+  },
+
+  setFilterStatus(status) {
+    this.state.filters.status = this.state.filters.status === status ? 'all' : status;
+    const btn = document.querySelector('[data-status-chip="pending"]');
+    if (btn) {
+      if (this.state.filters.status === 'pending') {
+        btn.className = 'px-3 py-1 rounded-full font-semibold bg-amber-600 text-white whitespace-nowrap';
+      } else {
+        btn.className = 'px-3 py-1 rounded-full font-semibold bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-200 whitespace-nowrap';
+      }
+    }
+    const selectStatus = document.getElementById('filter-status');
+    if (selectStatus) selectStatus.value = this.state.filters.status;
+    this.render();
+  },
+
   getFilteredTransactions() {
     const { month, type, category, status, search } = this.state.filters;
 
     return this.state.transactions.filter(t => {
-      // Filtro por mês (YYYY-MM)
-      if (month && (!t.date || !t.date.startsWith(month))) {
-        return false;
-      }
-      // Filtro por tipo
-      if (type !== 'all' && t.type !== type) {
-        return false;
-      }
-      // Filtro por categoria
-      if (category !== 'all' && t.category !== category) {
-        return false;
-      }
-      // Filtro por status
-      if (status !== 'all' && t.status !== status) {
-        return false;
-      }
-      // Busca textual por descrição
-      if (search && !t.description.toLowerCase().includes(search)) {
-        return false;
-      }
+      if (month && (!t.date || !t.date.startsWith(month))) return false;
+      if (type !== 'all' && t.type !== type) return false;
+      if (category !== 'all' && t.category !== category) return false;
+      if (status !== 'all' && t.status !== status) return false;
+      if (search && !t.description.toLowerCase().includes(search)) return false;
       return true;
     }).sort((a, b) => new Date(b.date) - new Date(a.date));
   },
@@ -1675,8 +1640,17 @@ const App = {
     const filteredTxs = this.getFilteredTransactions();
     this.renderKPIs(filteredTxs);
     this.renderTable(filteredTxs);
-    ChartService.renderCategoryChart(filteredTxs);
-    ChartService.renderHistoryChart(this.state.transactions, this.state.filters.month);
+    this.renderMobileList(filteredTxs);
+    this.renderRecentOverviewList(filteredTxs);
+    this.renderBudgetsHeroProgress(filteredTxs);
+
+    if (this.state.currentTab === 'reports') {
+      ChartService.renderCategoryChart(filteredTxs);
+      ChartService.renderHistoryChart(this.state.transactions, this.state.filters.month);
+      this.renderAnalytics(filteredTxs);
+    } else if (this.state.currentTab === 'budgets') {
+      this.renderBudgets();
+    }
   },
 
   renderKPIs(filteredTxs) {
@@ -1688,17 +1662,11 @@ const App = {
     filteredTxs.forEach(t => {
       const val = Number(t.amount) || 0;
       if (t.type === 'income') {
-        if (t.status === 'paid') {
-          incomePaid += val;
-        } else {
-          incomePending += val;
-        }
+        if (t.status === 'paid') incomePaid += val;
+        else incomePending += val;
       } else if (t.type === 'expense') {
-        if (t.status === 'paid') {
-          expensePaid += val;
-        } else {
-          expensePending += val;
-        }
+        if (t.status === 'paid') expensePaid += val;
+        else expensePending += val;
       }
     });
 
@@ -1707,52 +1675,97 @@ const App = {
     const currentBalance = incomePaid - expensePaid;
     const projectedBalance = totalIncome - totalExpense;
 
-    // Atualizar DOM
     const elBalance = document.getElementById('kpi-balance');
     const elProjected = document.getElementById('kpi-projected');
     const elIncome = document.getElementById('kpi-income');
     const elExpense = document.getElementById('kpi-expense');
 
     if (elBalance) {
-      elBalance.textContent = Utils.formatCurrency(currentBalance);
-      elBalance.className = `text-2xl sm:text-3xl font-extrabold ${currentBalance >= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-600 dark:text-rose-400'}`;
+      elBalance.textContent = this.formatDisplayValue(currentBalance);
     }
-
     if (elProjected) {
-      elProjected.textContent = Utils.formatCurrency(projectedBalance);
-      elProjected.className = `text-2xl sm:text-3xl font-extrabold ${projectedBalance >= 0 ? 'text-blue-600 dark:text-blue-400' : 'text-rose-600 dark:text-rose-400'}`;
+      elProjected.textContent = this.formatDisplayValue(projectedBalance);
     }
-
     if (elIncome) {
-      elIncome.textContent = Utils.formatCurrency(totalIncome);
+      elIncome.textContent = this.formatDisplayValue(totalIncome);
     }
-
     if (elExpense) {
-      elExpense.textContent = Utils.formatCurrency(totalExpense);
-    }
-
-    // Sub-textos informativos
-    const elBalanceSub = document.getElementById('kpi-balance-sub');
-    if (elBalanceSub) {
-      elBalanceSub.textContent = `Apenas realizados no mês`;
-    }
-
-    const elProjectedSub = document.getElementById('kpi-projected-sub');
-    if (elProjectedSub) {
-      const pendingDiff = (incomePending - expensePending);
-      elProjectedSub.textContent = pendingDiff === 0 
-        ? 'Sem pendências restantes' 
-        : `Inclui pendências (${Utils.formatCurrency(pendingDiff)})`;
+      elExpense.textContent = this.formatDisplayValue(totalExpense);
     }
   },
 
+  // Lista Mobile Nativa de Transações (Extrato)
+  renderMobileList(transactions) {
+    const container = document.getElementById('mobile-transactions-list');
+    if (!container) return;
+
+    if (transactions.length === 0) {
+      container.innerHTML = '';
+      return;
+    }
+
+    container.innerHTML = transactions.map(t => {
+      const isIncome = t.type === 'income';
+      const isPaid = t.status === 'paid';
+      const catObj = CATEGORIES.find(c => c.name.toLowerCase() === (t.category || '').toLowerCase());
+      const catColor = catObj ? catObj.color : '#64748b';
+      const accountBadge = t.account ? `<span class="px-1.5 py-0.5 rounded text-[10px] bg-slate-100 dark:bg-slate-800 text-slate-500 font-medium">${Utils.escapeHtml(t.account)}</span>` : '';
+
+      const amountFormatted = (isIncome ? '+ ' : '- ') + this.formatDisplayValue(t.amount);
+      const amountColor = isIncome ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-600 dark:text-rose-400';
+
+      const statusBadge = isPaid
+        ? `<button type="button" onclick="App.toggleStatus('${t.id}')" class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800/60 active:scale-95 transition-transform">
+            <span class="w-1.5 h-1.5 rounded-full bg-emerald-500"></span> Pago
+           </button>`
+        : `<button type="button" onclick="App.toggleStatus('${t.id}')" class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-amber-50 dark:bg-amber-950/40 text-amber-700 dark:text-amber-300 border border-amber-200 dark:border-amber-800/60 active:scale-95 transition-transform">
+            <span class="w-1.5 h-1.5 rounded-full bg-amber-500 status-pulse"></span> Pendente
+           </button>`;
+
+      return `
+        <div class="p-3.5 flex items-center justify-between gap-3 active:bg-slate-50 dark:active:bg-slate-800/50 transition-colors">
+          <div class="flex items-center gap-3 flex-1 min-w-0">
+            <div class="w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0 text-white font-bold text-xs shadow-sm" style="background-color: ${catColor}">
+              ${(t.category || 'O').substring(0, 2).toUpperCase()}
+            </div>
+            <div class="flex-1 min-w-0">
+              <div class="font-semibold text-slate-900 dark:text-slate-100 text-xs sm:text-sm truncate">
+                ${Utils.escapeHtml(t.description)}
+              </div>
+              <div class="flex items-center gap-1.5 mt-0.5">
+                <span class="text-[11px] text-slate-400 font-medium">${Utils.formatDateBR(t.date)}</span>
+                ${accountBadge}
+              </div>
+            </div>
+          </div>
+
+          <div class="text-right flex flex-col items-end gap-1 flex-shrink-0">
+            <div class="text-xs sm:text-sm font-bold ${amountColor}">
+              ${amountFormatted}
+            </div>
+            <div class="flex items-center gap-1.5">
+              ${statusBadge}
+              <button type="button" onclick="App.openEditModal('${t.id}')" class="p-1 text-slate-400 hover:text-blue-600">
+                <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z"/></svg>
+              </button>
+              <button type="button" onclick="App.openDeleteModal('${t.id}')" class="p-1 text-slate-400 hover:text-rose-600">
+                <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/></svg>
+              </button>
+            </div>
+          </div>
+        </div>
+      `;
+    }).join('');
+  },
+
+  // Tabela Desktop
   renderTable(transactions) {
     const tbody = document.getElementById('transactions-table-body');
     const emptyState = document.getElementById('transactions-empty-state');
     const countBadge = document.getElementById('transactions-count-badge');
 
     if (countBadge) {
-      countBadge.textContent = `${transactions.length} ${transactions.length === 1 ? 'lançamento' : 'lançamentos'}`;
+      countBadge.textContent = `${transactions.length} ${transactions.length === 1 ? 'item' : 'itens'}`;
     }
 
     if (!tbody) return;
@@ -1771,85 +1784,226 @@ const App = {
       const catObj = CATEGORIES.find(c => c.name.toLowerCase() === (t.category || '').toLowerCase());
       const catColor = catObj ? catObj.color : '#64748b';
 
-      const typeBadge = isIncome
-        ? `<span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-semibold bg-emerald-100 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300">
-            <svg class="w-3 h-3 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M7 11l5-5m0 0l5 5m-5-5v12"/></svg>
-            Receita
-           </span>`
-        : `<span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-semibold bg-rose-100 text-rose-800 dark:bg-rose-950/60 dark:text-rose-300">
-            <svg class="w-3 h-3 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M17 13l-5 5m0 0l-5-5m5 5V6"/></svg>
-            Despesa
-           </span>`;
-
       const statusBadge = isPaid
-        ? `<button type="button" onclick="App.toggleStatus('${t.id}')" title="Clique para marcar como Pendente" class="group inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-medium bg-emerald-50 dark:bg-emerald-950/50 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800/60 hover:bg-emerald-100 dark:hover:bg-emerald-900/50 transition-colors">
-            <span class="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
-            <span>Pago</span>
-            <svg class="w-3 h-3 opacity-0 group-hover:opacity-100 transition-opacity ml-0.5 text-emerald-600 dark:text-emerald-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4"/></svg>
+        ? `<button type="button" onclick="App.toggleStatus('${t.id}')" class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-emerald-50 dark:bg-emerald-950/50 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800/60 hover:bg-emerald-100">
+            <span class="w-1.5 h-1.5 rounded-full bg-emerald-500"></span> Pago
            </button>`
-        : `<button type="button" onclick="App.toggleStatus('${t.id}')" title="Clique para marcar como Pago" class="group inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-medium bg-amber-50 dark:bg-amber-950/50 text-amber-700 dark:text-amber-300 border border-amber-200 dark:border-amber-800/60 hover:bg-amber-100 dark:hover:bg-amber-900/50 transition-colors">
-            <span class="w-1.5 h-1.5 rounded-full bg-amber-500 status-pulse"></span>
-            <span>Pendente</span>
-            <svg class="w-3 h-3 opacity-0 group-hover:opacity-100 transition-opacity ml-0.5 text-amber-600 dark:text-amber-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg>
+        : `<button type="button" onclick="App.toggleStatus('${t.id}')" class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-amber-50 dark:bg-amber-950/50 text-amber-700 dark:text-amber-300 border border-amber-200 dark:border-amber-800/60 hover:bg-amber-100">
+            <span class="w-1.5 h-1.5 rounded-full bg-amber-500 status-pulse"></span> Pendente
            </button>`;
 
-      const amountFormatted = (isIncome ? '+ ' : '- ') + Utils.formatCurrency(t.amount);
-      const amountColor = isIncome 
-        ? 'text-emerald-600 dark:text-emerald-400 font-semibold' 
-        : 'text-rose-600 dark:text-rose-400 font-semibold';
+      const amountFormatted = (isIncome ? '+ ' : '- ') + this.formatDisplayValue(t.amount);
+      const amountColor = isIncome ? 'text-emerald-600 dark:text-emerald-400 font-bold' : 'text-rose-600 dark:text-rose-400 font-bold';
 
       return `
-        <tr class="table-row-hover border-b border-slate-200 dark:border-slate-800/80 hover:bg-slate-50/70 dark:hover:bg-slate-800/40 text-sm">
-          <td class="py-3.5 px-4 whitespace-nowrap text-slate-500 dark:text-slate-400 font-medium">
+        <tr class="table-row-hover border-b border-slate-200 dark:border-slate-800/80 hover:bg-slate-50/70 dark:hover:bg-slate-800/40 text-xs sm:text-sm">
+          <td class="py-3 px-4 whitespace-nowrap text-slate-500 font-medium">
             ${Utils.formatDateBR(t.date)}
           </td>
-          <td class="py-3.5 px-4">
-            <div class="font-medium text-slate-900 dark:text-slate-100 break-words max-w-xs">
-              ${Utils.escapeHtml(t.description)}
-            </div>
-            <div class="sm:hidden mt-1 flex items-center gap-2">
-              <span class="inline-block w-2 h-2 rounded-full" style="background-color: ${catColor}"></span>
-              <span class="text-xs text-slate-500 dark:text-slate-400">${Utils.escapeHtml(t.category)}</span>
-            </div>
+          <td class="py-3 px-4 font-semibold text-slate-900 dark:text-slate-100">
+            ${Utils.escapeHtml(t.description)}
           </td>
-          <td class="py-3.5 px-4 hidden sm:table-cell">
-            <div class="flex items-center gap-2">
-              <span class="w-2.5 h-2.5 rounded-full flex-shrink-0" style="background-color: ${catColor}"></span>
+          <td class="py-3 px-4">
+            <div class="flex items-center gap-1.5">
+              <span class="w-2.5 h-2.5 rounded-full" style="background-color: ${catColor}"></span>
               <span class="text-slate-700 dark:text-slate-300">${Utils.escapeHtml(t.category)}</span>
             </div>
           </td>
-          <td class="py-3.5 px-4 hidden md:table-cell">
-            ${typeBadge}
+          <td class="py-3 px-4 text-slate-500 text-xs">
+            ${Utils.escapeHtml(t.account || 'Padrão')}
           </td>
-          <td class="py-3.5 px-4 whitespace-nowrap">
+          <td class="py-3 px-4 whitespace-nowrap">
             ${statusBadge}
           </td>
-          <td class="py-3.5 px-4 text-right whitespace-nowrap ${amountColor}">
+          <td class="py-3 px-4 text-right whitespace-nowrap ${amountColor}">
             ${amountFormatted}
           </td>
-          <td class="py-3.5 px-4 text-right whitespace-nowrap">
-            <div class="inline-flex items-center gap-1">
-              <button type="button" onclick="App.openEditModal('${t.id}')" title="Editar transação" class="p-1.5 rounded-lg text-slate-500 hover:text-blue-600 dark:text-slate-400 dark:hover:text-blue-400 hover:bg-blue-50 dark:hover:bg-slate-800 transition-colors">
-                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z"/></svg>
-              </button>
-              <button type="button" onclick="App.openDeleteModal('${t.id}')" title="Excluir transação" class="p-1.5 rounded-lg text-slate-500 hover:text-rose-600 dark:text-slate-400 dark:hover:text-rose-400 hover:bg-rose-50 dark:hover:bg-slate-800 transition-colors">
-                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/></svg>
-              </button>
-            </div>
+          <td class="py-3 px-4 text-right whitespace-nowrap">
+            <button type="button" onclick="App.openEditModal('${t.id}')" class="p-1 text-slate-400 hover:text-blue-600">
+              <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z"/></svg>
+            </button>
+            <button type="button" onclick="App.openDeleteModal('${t.id}')" class="p-1 text-slate-400 hover:text-rose-600">
+              <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/></svg>
+            </button>
           </td>
         </tr>
       `;
     }).join('');
   },
 
+  // Últimos lançamentos na Visão Geral
+  renderRecentOverviewList(transactions) {
+    const list = document.getElementById('recent-transactions-list');
+    if (!list) return;
+
+    const recent = transactions.slice(0, 5);
+    if (recent.length === 0) {
+      list.innerHTML = `<div class="py-6 text-center text-xs text-slate-400">Nenhum lançamento no mês selecionado.</div>`;
+      return;
+    }
+
+    list.innerHTML = recent.map(t => {
+      const isIncome = t.type === 'income';
+      const catObj = CATEGORIES.find(c => c.name.toLowerCase() === (t.category || '').toLowerCase());
+      const catColor = catObj ? catObj.color : '#64748b';
+      const amountColor = isIncome ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-600 dark:text-rose-400';
+      const amountFormatted = (isIncome ? '+ ' : '- ') + this.formatDisplayValue(t.amount);
+
+      return `
+        <div class="py-2.5 flex items-center justify-between gap-3 text-xs">
+          <div class="flex items-center gap-2.5 flex-1 min-w-0">
+            <span class="w-2.5 h-2.5 rounded-full flex-shrink-0" style="background-color: ${catColor}"></span>
+            <div class="flex-1 min-w-0">
+              <div class="font-semibold text-slate-800 dark:text-slate-200 truncate">${Utils.escapeHtml(t.description)}</div>
+              <div class="text-[10px] text-slate-400">${Utils.formatDateBR(t.date)} • ${Utils.escapeHtml(t.category)}</div>
+            </div>
+          </div>
+          <div class="font-bold ${amountColor} flex-shrink-0">
+            ${amountFormatted}
+          </div>
+        </div>
+      `;
+    }).join('');
+  },
+
+  // Hero Budget Progress
+  renderBudgetsHeroProgress(transactions) {
+    const bar = document.getElementById('hero-budget-bar');
+    const pctLabel = document.getElementById('hero-budget-percentage');
+    const spentLabel = document.getElementById('hero-budget-spent');
+    const limitLabel = document.getElementById('hero-budget-limit');
+
+    if (!bar || !pctLabel) return;
+
+    const budgets = (this.state.settings && this.state.settings.budgets) || {};
+    const totalLimit = Object.values(budgets).reduce((a, b) => a + Number(b), 0);
+
+    const totalExpense = transactions
+      .filter(t => t.type === 'expense')
+      .reduce((a, b) => a + Number(b.amount), 0);
+
+    if (totalLimit <= 0) {
+      pctLabel.textContent = 'Sem meta definida';
+      bar.style.width = '0%';
+      spentLabel.textContent = `Gasto: ${this.formatDisplayValue(totalExpense)}`;
+      limitLabel.textContent = 'Toque em "Metas" para definir';
+      return;
+    }
+
+    const pct = Math.min(Math.round((totalExpense / totalLimit) * 100), 100);
+    pctLabel.textContent = `${pct}%`;
+    bar.style.width = `${pct}%`;
+
+    if (pct >= 100) {
+      bar.className = 'h-full bg-rose-500 rounded-full transition-all duration-500';
+    } else if (pct >= 80) {
+      bar.className = 'h-full bg-amber-400 rounded-full transition-all duration-500';
+    } else {
+      bar.className = 'h-full bg-blue-500 rounded-full transition-all duration-500';
+    }
+
+    spentLabel.textContent = `Gasto: ${this.formatDisplayValue(totalExpense)}`;
+    limitLabel.textContent = `Teto: ${this.formatDisplayValue(totalLimit)}`;
+  },
+
+  // Aba de Orçamentos e Metas
+  renderBudgets() {
+    const container = document.getElementById('budgets-list-container');
+    if (!container) return;
+
+    const filtered = this.getFilteredTransactions();
+    const expenses = filtered.filter(t => t.type === 'expense');
+
+    const spentByCategory = {};
+    expenses.forEach(t => {
+      const cat = t.category || 'Outros';
+      spentByCategory[cat] = (spentByCategory[cat] || 0) + Number(t.amount);
+    });
+
+    const budgets = (this.state.settings && this.state.settings.budgets) || {};
+
+    container.innerHTML = CATEGORIES.map(cat => {
+      const spent = spentByCategory[cat.name] || 0;
+      const limit = budgets[cat.name] || 0;
+      const pct = limit > 0 ? Math.min(Math.round((spent / limit) * 100), 100) : 0;
+
+      let barColor = 'bg-emerald-500';
+      if (pct >= 100) barColor = 'bg-rose-500';
+      else if (pct >= 75) barColor = 'bg-amber-500';
+
+      return `
+        <div class="p-3.5 rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-800/40 space-y-2">
+          <div class="flex items-center justify-between text-xs">
+            <div class="flex items-center gap-2">
+              <span class="w-3 h-3 rounded-full" style="background-color: ${cat.color}"></span>
+              <span class="font-bold text-slate-800 dark:text-slate-200">${cat.name}</span>
+            </div>
+            <button type="button" onclick="App.openBudgetModalFor('${cat.name}', ${limit})" class="text-blue-600 dark:text-blue-400 hover:underline font-semibold text-[11px]">
+              ${limit > 0 ? 'Alterar Limite' : '+ Definir Limite'}
+            </button>
+          </div>
+
+          <div class="w-full bg-slate-200 dark:bg-slate-700 rounded-full h-2 overflow-hidden">
+            <div class="h-full ${barColor} rounded-full transition-all duration-300" style="width: ${limit > 0 ? pct : 0}%"></div>
+          </div>
+
+          <div class="flex items-center justify-between text-[11px] text-slate-500 dark:text-slate-400">
+            <span>Gasto: <strong>${this.formatDisplayValue(spent)}</strong></span>
+            <span>Limite: <strong>${limit > 0 ? this.formatDisplayValue(limit) : 'Não definido'}</strong> ${limit > 0 ? `(${pct}%)` : ''}</span>
+          </div>
+        </div>
+      `;
+    }).join('');
+  },
+
+  // Métricas da Aba de Relatórios
+  renderAnalytics(filteredTxs) {
+    let income = 0;
+    let expense = 0;
+    let highest = { amount: 0, description: '-' };
+
+    filteredTxs.forEach(t => {
+      const val = Number(t.amount) || 0;
+      if (t.type === 'income') {
+        income += val;
+      } else if (t.type === 'expense') {
+        expense += val;
+        if (val > highest.amount) {
+          highest = { amount: val, description: t.description };
+        }
+      }
+    });
+
+    const savingsPct = income > 0 ? Math.max(0, Math.round(((income - expense) / income) * 100)) : 0;
+    const now = new Date();
+    const daysInMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate();
+    const dailyAvg = expense > 0 ? (expense / daysInMonth) : 0;
+
+    const elSavings = document.getElementById('report-savings-rate');
+    const elDaily = document.getElementById('report-daily-average');
+    const elHigh = document.getElementById('report-highest-expense');
+    const elHighName = document.getElementById('report-highest-expense-name');
+
+    if (elSavings) elSavings.textContent = `${savingsPct}%`;
+    if (elDaily) elDaily.textContent = this.formatDisplayValue(dailyAvg);
+    if (elHigh) elHigh.textContent = this.formatDisplayValue(highest.amount);
+    if (elHighName) elHighName.textContent = highest.description;
+  },
+
   openTransactionModal(editId = null) {
     const modal = document.getElementById('modal-transaction');
     const form = document.getElementById('form-transaction');
     const title = document.getElementById('modal-transaction-title');
+    const repeatWrapper = document.getElementById('tx-repeat-wrapper');
     if (!modal || !form) return;
 
     form.reset();
     this.state.editingId = editId;
+
+    if (repeatWrapper) {
+      repeatWrapper.classList.toggle('hidden', !!editId);
+      document.getElementById('tx-repeat-fields')?.classList.add('hidden');
+    }
 
     if (editId) {
       const tx = this.state.transactions.find(t => t.id === editId);
@@ -1861,25 +2015,29 @@ const App = {
       document.getElementById('tx-amount').value = tx.amount;
       document.getElementById('tx-type').value = tx.type;
       document.getElementById('tx-category').value = tx.category;
+      document.getElementById('tx-account').value = tx.account || 'Conta Corrente';
       document.getElementById('tx-date').value = tx.date;
       document.getElementById('tx-status').value = tx.status;
     } else {
       if (title) title.textContent = 'Novo Lançamento';
       document.getElementById('tx-id').value = '';
-      
-      // Data padrão: hoje se estiver no mês filtrado, ou primeiro dia do mês filtrado
       const today = new Date().toISOString().split('T')[0];
       const defaultDate = today.startsWith(this.state.filters.month) ? today : `${this.state.filters.month}-01`;
       document.getElementById('tx-date').value = defaultDate;
       document.getElementById('tx-type').value = 'expense';
+      document.getElementById('tx-account').value = 'Conta Corrente';
       document.getElementById('tx-status').value = 'paid';
     }
 
     modal.classList.remove('hidden');
     modal.classList.add('flex');
-    setTimeout(() => {
-      document.getElementById('tx-description').focus();
-    }, 100);
+    setTimeout(() => document.getElementById('tx-description').focus(), 80);
+  },
+
+  openTransactionModalWithType(type) {
+    this.openTransactionModal();
+    const typeSelect = document.getElementById('tx-type');
+    if (typeSelect) typeSelect.value = type;
   },
 
   closeTransactionModal() {
@@ -1899,26 +2057,19 @@ const App = {
     const amount = parseFloat(document.getElementById('tx-amount').value);
     const type = document.getElementById('tx-type').value;
     const category = document.getElementById('tx-category').value;
+    const account = document.getElementById('tx-account').value;
     const date = document.getElementById('tx-date').value;
     const status = document.getElementById('tx-status').value;
 
-    if (!description) {
-      Toast.show('Por favor, informe a descrição.', 'warning');
-      return;
-    }
+    const isRepeat = document.getElementById('tx-repeat-checkbox')?.checked;
+    const installments = parseInt(document.getElementById('tx-installments')?.value || '1', 10);
 
-    if (isNaN(amount) || amount <= 0) {
-      Toast.show('Informe um valor numérico positivo válido.', 'warning');
-      return;
-    }
-
-    if (!date) {
-      Toast.show('Informe a data do lançamento.', 'warning');
+    if (!description || isNaN(amount) || amount <= 0 || !date) {
+      Toast.show('Preencha os campos obrigatórios corretamente.', 'warning');
       return;
     }
 
     if (this.state.editingId) {
-      // Editar
       const index = this.state.transactions.findIndex(t => t.id === this.state.editingId);
       if (index !== -1) {
         this.state.transactions[index] = {
@@ -1927,28 +2078,51 @@ const App = {
           amount,
           type,
           category,
+          account,
           date,
           status,
           updatedAt: Date.now()
         };
-        Toast.show('Lançamento atualizado com sucesso!', 'success');
+        Toast.show('Lançamento atualizado!', 'success');
       }
     } else {
-      // Novo
-      const newTx = {
-        id: Utils.generateId(),
-        description,
-        amount,
-        type,
-        category,
-        date,
-        status,
-        updatedAt: Date.now()
-      };
-      this.state.transactions.unshift(newTx);
-      Toast.show('Lançamento cadastrado com sucesso!', 'success');
+      if (isRepeat && installments > 1) {
+        // Criar parcelas
+        const partAmount = Math.round((amount / installments) * 100) / 100;
+        const now = Date.now();
 
-      // Se a data cadastrada for de outro mês, ajustar o filtro para visualizar o novo item
+        for (let i = 0; i < installments; i++) {
+          const installmentDate = Utils.addMonths(date, i);
+          const newTx = {
+            id: Utils.generateId(),
+            description: `${description} (${i + 1}/${installments})`,
+            amount: partAmount,
+            type,
+            category,
+            account,
+            date: installmentDate,
+            status: i === 0 ? status : 'pending',
+            updatedAt: now + i
+          };
+          this.state.transactions.unshift(newTx);
+        }
+        Toast.show(`${installments} parcelas cadastradas com sucesso!`, 'success');
+      } else {
+        const newTx = {
+          id: Utils.generateId(),
+          description,
+          amount,
+          type,
+          category,
+          account,
+          date,
+          status,
+          updatedAt: Date.now()
+        };
+        this.state.transactions.unshift(newTx);
+        Toast.show('Lançamento cadastrado!', 'success');
+      }
+
       const txMonth = date.substring(0, 7);
       if (txMonth !== this.state.filters.month) {
         this.state.filters.month = txMonth;
@@ -1998,7 +2172,7 @@ const App = {
     this.state.transactions = this.state.transactions.filter(t => t.id !== this.state.deletingId);
     this.saveAndSync();
     this.closeDeleteModal();
-    Toast.show('Lançamento excluído com sucesso.', 'info');
+    Toast.show('Lançamento excluído.', 'info');
   },
 
   toggleStatus(id) {
@@ -2008,7 +2182,7 @@ const App = {
     tx.status = tx.status === 'paid' ? 'pending' : 'paid';
     tx.updatedAt = Date.now();
     this.saveAndSync();
-    Toast.show(`Status alterado para "${tx.status === 'paid' ? 'Pago' : 'Pendente'}"`, 'info', 2000);
+    Toast.show(`Status: ${tx.status === 'paid' ? 'Pago' : 'Pendente'}`, 'info', 1800);
   },
 
   clearFilters() {
@@ -2017,13 +2191,16 @@ const App = {
     this.state.filters.status = 'all';
     this.state.filters.search = '';
 
-    document.getElementById('filter-type').value = 'all';
-    document.getElementById('filter-category').value = 'all';
-    document.getElementById('filter-status').value = 'all';
-    document.getElementById('filter-search').value = '';
+    const filterCategory = document.getElementById('filter-category');
+    const filterStatus = document.getElementById('filter-status');
+    const filterSearch = document.getElementById('filter-search');
 
-    this.render();
-    Toast.show('Filtros redefinidos.', 'info', 2000);
+    if (filterCategory) filterCategory.value = 'all';
+    if (filterStatus) filterStatus.value = 'all';
+    if (filterSearch) filterSearch.value = '';
+
+    this.setFilterType('all');
+    Toast.show('Filtros limpos', 'info', 1500);
   },
 
   saveAndSync() {
@@ -2032,17 +2209,60 @@ const App = {
     SyncService.schedule();
   },
 
-  // =========================================================================
-  // PORTABILIDADE & BACKUP (JSON / CSV / AMOSTRA)
-  // =========================================================================
+  // Orçamentos Modal
+  openBudgetModal() {
+    const modal = document.getElementById('modal-budget');
+    if (modal) {
+      modal.classList.remove('hidden');
+      modal.classList.add('flex');
+    }
+  },
 
+  openBudgetModalFor(categoryName, currentLimit) {
+    this.openBudgetModal();
+    const catSelect = document.getElementById('budget-category');
+    const limitInput = document.getElementById('budget-limit');
+    if (catSelect) catSelect.value = categoryName;
+    if (limitInput) limitInput.value = currentLimit > 0 ? currentLimit : '';
+  },
+
+  closeBudgetModal() {
+    const modal = document.getElementById('modal-budget');
+    if (modal) {
+      modal.classList.add('hidden');
+      modal.classList.remove('flex');
+    }
+  },
+
+  handleBudgetSubmit(e) {
+    e.preventDefault();
+    const category = document.getElementById('budget-category').value;
+    const limit = parseFloat(document.getElementById('budget-limit').value);
+
+    if (!category || isNaN(limit) || limit < 0) {
+      Toast.show('Informe um valor de limite válido.', 'warning');
+      return;
+    }
+
+    if (!this.state.settings.budgets) {
+      this.state.settings.budgets = {};
+    }
+
+    this.state.settings.budgets[category] = limit;
+    this.saveAndSync();
+    this.closeBudgetModal();
+    Toast.show(`Limite de ${category} salvo!`, 'success');
+  },
+
+  // Backup & Importação
   exportJSON() {
     const payload = {
       app: 'Controle Financeiro Pessoal',
       version: SCHEMA_VERSION,
       exportedAt: new Date().toISOString(),
       transactionsCount: this.state.transactions.length,
-      transactions: this.state.transactions
+      transactions: this.state.transactions,
+      settings: this.state.settings
     };
 
     const jsonStr = JSON.stringify(payload, null, 2);
@@ -2052,13 +2272,12 @@ const App = {
     const today = new Date().toISOString().split('T')[0];
 
     a.href = url;
-    a.download = `controle-financeiro-backup-${today}.json`;
+    a.download = `fincontrol-backup-${today}.json`;
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);
     URL.revokeObjectURL(url);
-
-    Toast.show('Backup JSON exportado com sucesso!', 'success');
+    Toast.show('Backup JSON exportado!', 'success');
   },
 
   exportCSV() {
@@ -2067,13 +2286,13 @@ const App = {
       return;
     }
 
-    // Padrão Brasil com separador ';' e UTF-8 BOM para Excel / Sheets
-    const header = ['ID', 'Data', 'Tipo', 'Categoria', 'Descrição', 'Valor', 'Status'];
+    const header = ['ID', 'Data', 'Tipo', 'Categoria', 'Conta', 'Descrição', 'Valor', 'Status'];
     const rows = this.state.transactions.map(t => [
       `"${t.id}"`,
       `"${Utils.formatDateBR(t.date)}"`,
       `"${t.type === 'income' ? 'Receita' : 'Despesa'}"`,
       `"${(t.category || '').replace(/"/g, '""')}"`,
+      `"${(t.account || '').replace(/"/g, '""')}"`,
       `"${(t.description || '').replace(/"/g, '""')}"`,
       `"${Number(t.amount || 0).toFixed(2).replace('.', ',')}"`,
       `"${t.status === 'paid' ? 'Pago' : 'Pendente'}"`
@@ -2086,13 +2305,12 @@ const App = {
     const today = new Date().toISOString().split('T')[0];
 
     a.href = url;
-    a.download = `controle-financeiro-${today}.csv`;
+    a.download = `fincontrol-${today}.csv`;
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);
     URL.revokeObjectURL(url);
-
-    Toast.show('Planilha CSV exportada com sucesso!', 'success');
+    Toast.show('Planilha CSV exportada!', 'success');
   },
 
   openImportModal() {
@@ -2131,10 +2349,9 @@ const App = {
         const importedList = Array.isArray(json.transactions) ? json.transactions : (Array.isArray(json) ? json : null);
 
         if (!importedList) {
-          throw new Error('Formato inválido: lista de transações não encontrada.');
+          throw new Error('Formato inválido.');
         }
 
-        // Validação e normalização dos itens
         const validTxs = [];
         for (const item of importedList) {
           if (!item.description || isNaN(Number(item.amount))) continue;
@@ -2144,6 +2361,7 @@ const App = {
             amount: Math.abs(Number(item.amount)),
             type: item.type === 'income' ? 'income' : 'expense',
             category: item.category || 'Outros',
+            account: item.account || 'Conta Corrente',
             date: item.date || new Date().toISOString().split('T')[0],
             status: item.status === 'pending' ? 'pending' : 'paid',
             updatedAt: Date.now()
@@ -2151,7 +2369,7 @@ const App = {
         }
 
         if (validTxs.length === 0) {
-          Toast.show('Nenhuma transação válida encontrada no arquivo.', 'error');
+          Toast.show('Nenhuma transação válida encontrada.', 'error');
           return;
         }
 
@@ -2160,7 +2378,6 @@ const App = {
           this.markDeleted(this.state.transactions.map(t => t.id).filter(id => !importedIds.has(id)));
           this.state.transactions = validTxs;
         } else {
-          // Mesclar evitando IDs duplicados
           const existingIds = new Set(this.state.transactions.map(t => t.id));
           const newEntries = validTxs.map(t => {
             if (existingIds.has(t.id)) {
@@ -2171,22 +2388,23 @@ const App = {
           this.state.transactions = [...newEntries, ...this.state.transactions];
         }
 
+        if (json.settings && json.settings.budgets) {
+          this.state.settings.budgets = { ...this.state.settings.budgets, ...json.settings.budgets };
+        }
+
         this.saveAndSync();
         this.closeImportModal();
         Toast.show(`${validTxs.length} transações importadas com sucesso!`, 'success');
       } catch (err) {
-        console.error('Falha ao processar arquivo JSON:', err);
-        Toast.show('Arquivo inválido ou corrompido: ' + err.message, 'error');
+        console.error('Falha na importação:', err);
+        Toast.show('Arquivo inválido: ' + err.message, 'error');
       }
     };
 
     reader.readAsText(file);
   },
 
-  // =========================================================================
-  // SEGURANÇA: ALTERAÇÃO DE SENHA
-  // =========================================================================
-
+  // Alteração de Senha
   openPasswordModal() {
     const modal = document.getElementById('modal-password');
     const form = document.getElementById('form-password');
@@ -2234,14 +2452,14 @@ const App = {
         ...this.getPersistPayload(),
         updatedAt: new Date().toISOString()
       });
-      SyncService.pushOnly(); // Envia o cofre com a nova senha para a nuvem
+      SyncService.pushOnly();
       this.closePasswordModal();
       Toast.show(SyncService.isEnabled()
-        ? 'Senha alterada! Use a nova senha também nos outros aparelhos.'
+        ? 'Senha alterada! Use a nova senha nos outros aparelhos.'
         : 'Senha alterada com sucesso!', 'success', 5000);
     } catch (err) {
       console.error(err);
-      Toast.show('Erro ao alterar a senha: ' + err.message, 'error');
+      Toast.show('Erro ao alterar senha: ' + err.message, 'error');
     } finally {
       btn.disabled = false;
     }
@@ -2253,12 +2471,11 @@ const App = {
     this.markDeleted(this.state.transactions.map(t => t.id));
     this.state.transactions = samples;
     this.saveAndSync();
-    Toast.show('Dados de exemplo carregados com sucesso!', 'success');
+    Toast.show('Dados de exemplo carregados!', 'success');
   },
 
   confirmClearAll() {
-    if (confirm('Tem certeza de que deseja apagar TODOS os lançamentos? Essa ação não pode ser desfeita sem um backup prévio.' +
-      (SyncService.isEnabled() ? '\n\nAtenção: a exclusão também será aplicada nos outros aparelhos sincronizados.' : ''))) {
+    if (confirm('Tem certeza de que deseja apagar TODOS os lançamentos?')) {
       this.markDeleted(this.state.transactions.map(t => t.id));
       this.state.transactions = [];
       this.saveAndSync();
@@ -2266,10 +2483,7 @@ const App = {
     }
   },
 
-  // =========================================================================
-  // SINCRONIZAÇÃO (MODAL)
-  // =========================================================================
-
+  // Sincronização
   openSyncModal() {
     const modal = document.getElementById('modal-sync');
     const enabled = SyncService.isEnabled();
@@ -2307,7 +2521,7 @@ const App = {
 
     errorEl.classList.add('hidden');
     if (!token || !password) {
-      errorEl.textContent = 'Informe o token do GitHub e sua senha atual.';
+      errorEl.textContent = 'Informe o token do GitHub e a senha.';
       errorEl.classList.remove('hidden');
       return;
     }
@@ -2318,7 +2532,7 @@ const App = {
     try {
       await SyncService.connect(token, password, overwrite);
       this.closeSyncModal();
-      Toast.show('Sincronização ativada! Agora entre no outro aparelho com "Restaurar da nuvem".', 'success', 6000);
+      Toast.show('Sincronização ativada com sucesso!', 'success', 6000);
     } catch (err) {
       console.error(err);
       SyncService.setStatus(SyncService.isEnabled() ? 'error' : 'off', err.message);
@@ -2331,14 +2545,14 @@ const App = {
   },
 
   async handleSyncDisconnect() {
-    if (!confirm('Desativar a sincronização NESTE aparelho?\n\nOs dados locais continuam aqui. Os dados na nuvem (Gist) não são apagados.')) return;
+    if (!confirm('Desativar a sincronização neste aparelho?')) return;
     await SyncService.disconnect();
     this.closeSyncModal();
     Toast.show('Sincronização desativada neste aparelho.', 'info');
   }
 };
 
-// Inicializar aplicação ao carregar a página
+// Inicialização
 document.addEventListener('DOMContentLoaded', () => {
   App.init();
 });

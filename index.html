@@ -2,10 +2,15 @@
 <html lang="pt-BR" class="h-full">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Controle Financeiro Pessoal | FinControl</title>
-  <meta name="description" content="Aplicação completa e segura de Controle Financeiro Pessoal, 100% client-side, otimizada para GitHub Pages.">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+  <title>FinControl - Controle Financeiro Pessoal</title>
+  <meta name="description" content="Aplicação completa e segura de Controle Financeiro Pessoal, 100% client-side, sincronizada e criptografada de ponta a ponta.">
   <meta name="robots" content="noindex, nofollow">
+  <meta name="theme-color" content="#0f172a">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <link rel="manifest" href="manifest.webmanifest">
   <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>💳</text></svg>">
 
   <!-- Tailwind CSS via CDN -->
@@ -44,7 +49,7 @@
        TELA DE LOGIN / CRIAÇÃO DE SENHA (exibida antes de qualquer dado)
        ======================================================================== -->
   <section id="auth-screen" aria-labelledby="auth-title" class="fixed inset-0 z-[60] overflow-y-auto bg-gradient-to-br from-slate-900 via-slate-950 to-blue-950 flex items-center justify-center p-4">
-    <div class="w-full max-w-md animate-fade-in">
+    <div class="w-full max-w-md animate-fade-in my-auto">
 
       <!-- Logo -->
       <div class="flex flex-col items-center mb-6 text-center">
@@ -69,7 +74,6 @@
         </div>
 
         <form id="auth-form" class="mt-5 space-y-4" novalidate>
-          <!-- Campo de usuário oculto para gerenciadores de senha -->
           <input type="text" name="username" value="fincontrol" autocomplete="username" class="hidden" tabindex="-1" aria-hidden="true">
 
           <div>
@@ -86,13 +90,13 @@
           <div id="auth-confirm-wrapper" class="hidden">
             <label for="auth-password-confirm" class="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">Confirmar senha</label>
             <input type="password" id="auth-password-confirm" autocomplete="new-password" placeholder="••••••••" class="w-full px-3.5 py-2.5 text-sm rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500">
-            <p class="text-[11px] text-slate-400 mt-1">Mínimo de 8 caracteres. Use letras, números e símbolos.</p>
+            <p class="text-[11px] text-slate-400 mt-1">Mínimo de 8 caracteres.</p>
           </div>
 
           <div id="auth-token-wrapper" class="hidden">
             <label for="auth-token" class="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">Token do GitHub (Personal Access Token)</label>
             <input type="password" id="auth-token" placeholder="ghp_••••••••••••••••••••" class="w-full px-3.5 py-2.5 text-sm rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500 font-mono">
-            <p class="text-[11px] text-slate-400 mt-1">Token do GitHub com permissão de <strong>gist</strong>. Usado para baixar seus dados criptografados.</p>
+            <p class="text-[11px] text-slate-400 mt-1">Token do GitHub com permissão de <strong>gist</strong>.</p>
           </div>
 
           <div id="auth-error" role="alert" class="hidden text-xs px-3 py-2 rounded-xl bg-rose-50 dark:bg-rose-950/40 text-rose-700 dark:text-rose-300 border border-rose-200 dark:border-rose-900"></div>
@@ -116,408 +120,523 @@
       </div>
 
       <p class="text-center text-[11px] text-slate-400 mt-5 leading-relaxed">
-        🔒 Criptografia AES-256-GCM com chave derivada por PBKDF2.<br>
-        Seus dados ficam apenas neste navegador e nunca são enviados a servidores.
+        🔒 Criptografia AES-256-GCM ponta a ponta.<br>
+        Seus dados permanecem seguros no seu dispositivo e no seu Gist privado.
       </p>
     </div>
   </section>
 
-  <!-- Conteúdo da aplicação (visível somente após desbloqueio) -->
-  <div id="app-root" class="hidden flex-1 flex flex-col">
-
   <!-- ========================================================================
-       CABEÇALHO (NAVBAR)
+       CONTEÚDO PRINCIPAL DA APLICAÇÃO (após autenticação)
        ======================================================================== -->
-  <header class="sticky top-0 z-30 bg-white/85 dark:bg-slate-900/85 border-b border-slate-200/80 dark:border-slate-800/80 glass-header">
-    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between gap-4">
-      
-      <!-- Logo & Título -->
-      <div class="flex items-center gap-3">
-        <div class="w-10 h-10 rounded-xl bg-gradient-to-tr from-blue-700 to-blue-500 flex items-center justify-center text-white shadow-md shadow-blue-500/20">
-          <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-          </svg>
+  <div id="app-root" class="hidden flex-1 flex flex-col min-h-screen">
+
+    <!-- CABEÇALHO -->
+    <header class="sticky top-0 z-30 bg-white/90 dark:bg-slate-900/90 border-b border-slate-200 dark:border-slate-800 glass-header">
+      <div class="max-w-7xl mx-auto px-3 sm:px-6 lg:px-8 h-14 sm:h-16 flex items-center justify-between gap-2">
+        
+        <!-- Logo & Marca -->
+        <div class="flex items-center gap-2 sm:gap-3">
+          <div class="w-8 h-8 sm:w-10 sm:h-10 rounded-xl bg-gradient-to-tr from-blue-700 to-blue-500 flex items-center justify-center text-white shadow-md shadow-blue-500/20 flex-shrink-0">
+            <svg class="w-5 h-5 sm:w-6 sm:h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+            </svg>
+          </div>
+          <div>
+            <div class="flex items-center gap-1.5">
+              <span class="text-base sm:text-lg font-bold tracking-tight text-slate-900 dark:text-white">FinControl</span>
+              <span class="hidden md:inline-block text-[10px] font-semibold uppercase tracking-wider px-2 py-0.5 rounded-full bg-blue-100 dark:bg-blue-900/60 text-blue-700 dark:text-blue-300">
+                PWA
+              </span>
+            </div>
+            <p class="text-[11px] text-slate-500 dark:text-slate-400 hidden sm:block">Controle Financeiro</p>
+          </div>
         </div>
-        <div>
-          <div class="flex items-center gap-2">
-            <span class="text-lg font-bold tracking-tight text-slate-900 dark:text-white">FinControl</span>
-            <span class="text-[10px] font-semibold uppercase tracking-wider px-2 py-0.5 rounded-full bg-blue-100 dark:bg-blue-900/60 text-blue-700 dark:text-blue-300">
-              Client-Side
+
+        <!-- Abas no Desktop (Desktop Nav) -->
+        <nav class="hidden md:flex items-center gap-1 bg-slate-100 dark:bg-slate-800/70 p-1 rounded-xl border border-slate-200 dark:border-slate-700/60 text-xs font-semibold text-slate-600 dark:text-slate-300">
+          <button type="button" onclick="App.switchTab('overview')" data-tab-btn="overview" class="px-3 py-1.5 rounded-lg transition-colors nav-tab-active bg-white dark:bg-slate-900 shadow-sm text-blue-600 dark:text-blue-400">
+            Visão Geral
+          </button>
+          <button type="button" onclick="App.switchTab('transactions')" data-tab-btn="transactions" class="px-3 py-1.5 rounded-lg hover:text-slate-900 dark:hover:text-white transition-colors">
+            Extrato
+          </button>
+          <button type="button" onclick="App.switchTab('reports')" data-tab-btn="reports" class="px-3 py-1.5 rounded-lg hover:text-slate-900 dark:hover:text-white transition-colors">
+            Relatórios
+          </button>
+          <button type="button" onclick="App.switchTab('budgets')" data-tab-btn="budgets" class="px-3 py-1.5 rounded-lg hover:text-slate-900 dark:hover:text-white transition-colors">
+            Metas & Limites
+          </button>
+        </nav>
+
+        <!-- Ações do Topo -->
+        <div class="flex items-center gap-1 sm:gap-2">
+
+          <!-- Botão Olho (Ocultar/Mostrar Valores) -->
+          <button id="btn-toggle-visibility-values" type="button" aria-label="Ocultar ou mostrar valores" title="Ocultar valores da tela" class="p-2 rounded-lg text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors">
+            <svg id="eye-icon-open" class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"/></svg>
+            <svg id="eye-icon-closed" class="w-5 h-5 hidden" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.543-7a9.97 9.97 0 011.563-3.029m5.858.908a3 3 0 114.243 4.243M9.878 9.878l4.242 4.242M9.88 9.88l-3.29-3.29m7.532 7.532l3.29 3.29M3 3l3.59 3.59m0 0A9.953 9.953 0 0112 5c4.478 0 8.268 2.943 9.543 7a10.025 10.025 0 01-4.132 5.411m0 0L21 21"/></svg>
+          </button>
+          
+          <!-- Sincronização na nuvem -->
+          <button id="btn-sync" type="button" aria-label="Sincronização na nuvem" title="Sincronização desativada" class="relative p-2 rounded-lg text-slate-500 hover:text-blue-600 dark:text-slate-400 dark:hover:text-blue-400 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors">
+            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"/>
+            </svg>
+            <span id="sync-dot" class="absolute top-1.5 right-1.5 w-2 h-2 rounded-full bg-slate-400"></span>
+          </button>
+
+          <!-- Dropdown Backup / Configs -->
+          <div class="relative group">
+            <button type="button" class="p-2 rounded-lg text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors">
+              <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 5v.01M12 12v.01M12 19v.01M12 6a1 1 0 110-2 1 1 0 010 2zm0 7a1 1 0 110-2 1 1 0 010 2zm0 7a1 1 0 110-2 1 1 0 010 2z"/>
+              </svg>
+            </button>
+            <div class="absolute right-0 mt-1 w-52 bg-white dark:bg-slate-900 rounded-xl shadow-xl border border-slate-200 dark:border-slate-800 py-1.5 opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-150 z-50">
+              <button id="btn-load-sample" type="button" class="w-full text-left px-3.5 py-2 text-xs text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 flex items-center gap-2">
+                <svg class="w-4 h-4 text-amber-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19.428 15.428a2 2 0 00-1.022-.547l-2.387-.477a6 6 0 00-3.86.517l-.318.158a6 6 0 01-3.86.517L6.05 15.21a2 2 0 00-1.806.547M8 4h8l-1 1v5.172a2 2 0 00.586 1.414l5 5c1.26 1.26.367 3.414-1.415 3.414H4.828c-1.782 0-2.674-2.154-1.414-3.414l5-5A2 2 0 009 10.172V5L8 4z"/></svg>
+                <span>Dados de Exemplo</span>
+              </button>
+              <button id="btn-export-json" type="button" class="w-full text-left px-3.5 py-2 text-xs text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 flex items-center gap-2">
+                <svg class="w-4 h-4 text-emerald-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"/></svg>
+                <span>Exportar JSON</span>
+              </button>
+              <button id="btn-export-csv" type="button" class="w-full text-left px-3.5 py-2 text-xs text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 flex items-center gap-2">
+                <svg class="w-4 h-4 text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 17v-2m3 2v-4m3 4v-6m2 10H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>
+                <span>Exportar CSV (Excel)</span>
+              </button>
+              <button id="btn-import-json" type="button" class="w-full text-left px-3.5 py-2 text-xs text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 flex items-center gap-2 border-t border-slate-100 dark:border-slate-800">
+                <svg class="w-4 h-4 text-purple-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"/></svg>
+                <span>Importar JSON</span>
+              </button>
+              <button id="btn-change-password" type="button" class="w-full text-left px-3.5 py-2 text-xs text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 flex items-center gap-2 border-t border-slate-100 dark:border-slate-800">
+                <svg class="w-4 h-4 text-amber-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z"/></svg>
+                <span>Alterar Senha</span>
+              </button>
+              <button id="btn-clear-all" type="button" class="w-full text-left px-3.5 py-2 text-xs text-rose-600 dark:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/40 flex items-center gap-2 border-t border-slate-100 dark:border-slate-800">
+                <svg class="w-4 h-4 text-rose-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/></svg>
+                <span>Zerar Dados</span>
+              </button>
+            </div>
+          </div>
+
+          <!-- Tema Claro/Escuro -->
+          <button id="btn-theme-toggle" type="button" aria-label="Alternar Tema Claro/Escuro" class="p-2 rounded-lg text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors">
+            <svg id="theme-icon-sun" class="w-5 h-5 hidden text-amber-400" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M10 2a1 1 0 011 1v1a1 1 0 11-2 0V3a1 1 0 011-1zm4 8a4 4 0 11-8 0 4 4 0 018 0zm-.464 4.95l.707.707a1 1 0 001.414-1.414l-.707-.707a1 1 0 00-1.414 1.414zm2.12-10.607a1 1 0 010 1.414l-.706.707a1 1 0 11-1.414-1.414l.707-.707a1 1 0 011.414 0zM17 11a1 1 0 100-2h-1a1 1 0 100 2h1zm-7 4a1 1 0 011 1v1a1 1 0 11-2 0v-1a1 1 0 011-1zM5.05 6.464A1 1 0 106.465 5.05l-.708-.707a1 1 0 00-1.414 1.414l.707.707zm1.414 8.486l-.707.707a1 1 0 01-1.414-1.414l.707-.707a1 1 0 011.414 1.414zM4 11a1 1 0 100-2H3a1 1 0 000 2h1z" clip-rule="evenodd" /></svg>
+            <svg id="theme-icon-moon" class="w-5 h-5 text-slate-600 dark:text-slate-300" fill="currentColor" viewBox="0 0 20 20"><path d="M17.293 13.293A8 8 0 016.707 2.707a8.001 8.001 0 1010.586 10.586z" /></svg>
+          </button>
+
+          <!-- Bloquear sessão -->
+          <button id="btn-lock" type="button" aria-label="Bloquear (sair)" title="Bloquear (sair)" class="p-2 rounded-lg text-slate-500 hover:text-rose-600 dark:text-slate-400 dark:hover:text-rose-400 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors">
+            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"/></svg>
+          </button>
+
+          <!-- Botão Novo Lançamento (Desktop) -->
+          <button id="btn-new-transaction" type="button" class="hidden md:inline-flex items-center gap-1.5 px-3.5 py-2 text-xs font-semibold rounded-xl text-white bg-blue-600 hover:bg-blue-700 active:bg-blue-800 shadow-md shadow-blue-600/25 transition-all">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M12 4v16m8-8H4"/></svg>
+            <span>Novo Lançamento</span>
+          </button>
+
+        </div>
+      </div>
+    </header>
+
+    <!-- BARRA GLOBAL DE SELEÇÃO DE MÊS -->
+    <div class="bg-white/60 dark:bg-slate-900/60 border-b border-slate-200/80 dark:border-slate-800/80 px-3 py-2">
+      <div class="max-w-7xl mx-auto flex items-center justify-between gap-2">
+        <div class="flex items-center gap-1 text-xs text-slate-500 dark:text-slate-400">
+          <span class="font-medium">Período:</span>
+          <span id="current-month-display" class="font-bold text-slate-800 dark:text-slate-200"></span>
+        </div>
+
+        <div class="flex items-center gap-1 bg-white dark:bg-slate-800 p-0.5 rounded-lg border border-slate-200 dark:border-slate-700 shadow-sm">
+          <button id="btn-prev-month" type="button" title="Mês anterior" class="p-1 rounded hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-600 dark:text-slate-300">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"/></svg>
+          </button>
+          <select id="filter-month" aria-label="Selecionar Mês" class="text-xs font-semibold bg-transparent text-slate-800 dark:text-slate-200 border-none focus:ring-0 cursor-pointer py-0.5 pl-1.5 pr-6">
+            <!-- Preenchido via JS -->
+          </select>
+          <button id="btn-next-month" type="button" title="Próximo mês" class="p-1 rounded hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-600 dark:text-slate-300">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/></svg>
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- ======================================================================
+         CONTEÚDO DAS ABAS (CONTAINER)
+         ====================================================================== -->
+    <main class="flex-1 max-w-7xl w-full mx-auto px-3 sm:px-6 lg:px-8 py-4 sm:py-6 space-y-5 content-area-mobile">
+
+      <!-- ====================================================================
+           ABA 1: VISÃO GERAL (DASHBOARD)
+           ==================================================================== -->
+      <section id="tab-overview" class="space-y-4 animate-fade-in">
+        
+        <!-- CARD PRINCIPAL DE SALDO (Fintech Hero Card) -->
+        <div class="relative overflow-hidden rounded-2xl bg-gradient-to-br from-slate-900 via-blue-950 to-slate-900 text-white p-5 sm:p-6 shadow-xl border border-blue-900/50">
+          <div class="flex items-center justify-between text-xs text-slate-300 font-medium">
+            <span>Saldo Realizado no Mês</span>
+            <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-blue-500/20 text-blue-300 border border-blue-400/30 text-[11px]">
+              <span class="w-1.5 h-1.5 rounded-full bg-emerald-400"></span>
+              Realizado
             </span>
           </div>
-          <p class="text-xs text-slate-500 dark:text-slate-400 hidden sm:block">Controle Financeiro Pessoal</p>
-        </div>
-      </div>
 
-      <!-- Ações do Cabeçalho -->
-      <div class="flex items-center gap-2 sm:gap-3">
-        
-        <!-- Botão Dados de Exemplo (Mobile & Desktop) -->
-        <button id="btn-load-sample" type="button" title="Carregar conjunto de dados realistas para demonstração" class="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg text-slate-700 dark:text-slate-200 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 border border-slate-300/70 dark:border-slate-700 transition-colors">
-          <svg class="w-4 h-4 text-amber-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19.428 15.428a2 2 0 00-1.022-.547l-2.387-.477a6 6 0 00-3.86.517l-.318.158a6 6 0 01-3.86.517L6.05 15.21a2 2 0 00-1.806.547M8 4h8l-1 1v5.172a2 2 0 00.586 1.414l5 5c1.26 1.26.367 3.414-1.415 3.414H4.828c-1.782 0-2.674-2.154-1.414-3.414l5-5A2 2 0 009 10.172V5L8 4z"/>
-          </svg>
-          <span class="hidden md:inline">Dados de Exemplo</span>
-          <span class="md:hidden">Exemplos</span>
-        </button>
-
-        <!-- Dropdown Backup / Portabilidade -->
-        <div class="relative group">
-          <button type="button" class="inline-flex items-center gap-1 px-3 py-1.5 text-xs font-medium rounded-lg text-slate-700 dark:text-slate-200 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 border border-slate-300/70 dark:border-slate-700 transition-colors">
-            <svg class="w-4 h-4 text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-3m-1 4l-3 3m0 0l-3-3m3 3V4"/>
-            </svg>
-            <span class="hidden sm:inline">Backup</span>
-            <svg class="w-3 h-3 text-slate-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/></svg>
-          </button>
-          <div class="absolute right-0 mt-1 w-48 bg-white dark:bg-slate-900 rounded-xl shadow-xl border border-slate-200 dark:border-slate-800 py-1.5 opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-150 z-50">
-            <button id="btn-export-json" type="button" class="w-full text-left px-3.5 py-2 text-xs text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 flex items-center gap-2">
-              <svg class="w-4 h-4 text-emerald-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"/></svg>
-              <span>Exportar JSON</span>
-            </button>
-            <button id="btn-export-csv" type="button" class="w-full text-left px-3.5 py-2 text-xs text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 flex items-center gap-2">
-              <svg class="w-4 h-4 text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 17v-2m3 2v-4m3 4v-6m2 10H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>
-              <span>Exportar CSV (Excel)</span>
-            </button>
-            <button id="btn-import-json" type="button" class="w-full text-left px-3.5 py-2 text-xs text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 flex items-center gap-2 border-t border-slate-100 dark:border-slate-800">
-              <svg class="w-4 h-4 text-purple-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"/></svg>
-              <span>Importar JSON</span>
-            </button>
-            <button id="btn-change-password" type="button" class="w-full text-left px-3.5 py-2 text-xs text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 flex items-center gap-2 border-t border-slate-100 dark:border-slate-800">
-              <svg class="w-4 h-4 text-amber-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z"/></svg>
-              <span>Alterar Senha</span>
-            </button>
-            <button id="btn-clear-all" type="button" class="w-full text-left px-3.5 py-2 text-xs text-rose-600 dark:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/40 flex items-center gap-2 border-t border-slate-100 dark:border-slate-800">
-              <svg class="w-4 h-4 text-rose-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/></svg>
-              <span>Zerar Dados</span>
-            </button>
-          </div>
-        </div>
-
-        <!-- Sincronização na nuvem -->
-        <button id="btn-sync" type="button" aria-label="Sincronização na nuvem" title="Sincronização desativada" class="relative p-2 rounded-lg text-slate-500 hover:text-blue-600 dark:text-slate-400 dark:hover:text-blue-400 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors">
-          <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"/>
-          </svg>
-          <span id="sync-dot" class="absolute top-1.5 right-1.5 w-2 h-2 rounded-full bg-slate-400"></span>
-        </button>
-
-        <!-- Bloquear sessão -->
-        <button id="btn-lock" type="button" aria-label="Bloquear (sair)" title="Bloquear (sair)" class="p-2 rounded-lg text-slate-500 hover:text-rose-600 dark:text-slate-400 dark:hover:text-rose-400 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors">
-          <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"/></svg>
-        </button>
-
-        <!-- Toggle Dark/Light Mode -->
-        <button id="btn-theme-toggle" type="button" aria-label="Alternar Tema Claro/Escuro" class="p-2 rounded-lg text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors">
-          <svg id="theme-icon-sun" class="w-5 h-5 hidden text-amber-400" fill="currentColor" viewBox="0 0 20 20">
-            <path fill-rule="evenodd" d="M10 2a1 1 0 011 1v1a1 1 0 11-2 0V3a1 1 0 011-1zm4 8a4 4 0 11-8 0 4 4 0 018 0zm-.464 4.95l.707.707a1 1 0 001.414-1.414l-.707-.707a1 1 0 00-1.414 1.414zm2.12-10.607a1 1 0 010 1.414l-.706.707a1 1 0 11-1.414-1.414l.707-.707a1 1 0 011.414 0zM17 11a1 1 0 100-2h-1a1 1 0 100 2h1zm-7 4a1 1 0 011 1v1a1 1 0 11-2 0v-1a1 1 0 011-1zM5.05 6.464A1 1 0 106.465 5.05l-.708-.707a1 1 0 00-1.414 1.414l.707.707zm1.414 8.486l-.707.707a1 1 0 01-1.414-1.414l.707-.707a1 1 0 011.414 1.414zM4 11a1 1 0 100-2H3a1 1 0 000 2h1z" clip-rule="evenodd" />
-          </svg>
-          <svg id="theme-icon-moon" class="w-5 h-5 text-slate-600 dark:text-slate-300" fill="currentColor" viewBox="0 0 20 20">
-            <path d="M17.293 13.293A8 8 0 016.707 2.707a8.001 8.001 0 1010.586 10.586z" />
-          </svg>
-        </button>
-
-        <!-- Botão Novo Lançamento -->
-        <button id="btn-new-transaction" type="button" class="inline-flex items-center gap-1.5 px-3.5 py-2 text-xs sm:text-sm font-semibold rounded-xl text-white bg-blue-600 hover:bg-blue-700 active:bg-blue-800 shadow-md shadow-blue-600/25 transition-all transform active:scale-95">
-          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M12 4v16m8-8H4"/>
-          </svg>
-          <span>Novo Lançamento</span>
-        </button>
-
-      </div>
-    </div>
-  </header>
-
-  <!-- ========================================================================
-       CONTEÚDO PRINCIPAL
-       ======================================================================== -->
-  <main class="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-6 space-y-6">
-
-    <!-- SELETOR DE MÊS & TÍTULO DA VISUALIZAÇÃO -->
-    <div class="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 pb-2 border-b border-slate-200/80 dark:border-slate-800">
-      <div>
-        <h1 class="text-xl sm:text-2xl font-bold tracking-tight text-slate-900 dark:text-white flex items-center gap-2">
-          Visão Financeira
-          <span id="current-month-display" class="text-base sm:text-lg font-medium text-slate-500 dark:text-slate-400"></span>
-        </h1>
-        <p class="text-xs sm:text-sm text-slate-500 dark:text-slate-400">
-          Dados mantidos exclusivamente no seu navegador via <code class="font-mono text-blue-600 dark:text-blue-400">localStorage</code>.
-        </p>
-      </div>
-
-      <!-- Navegador de Meses -->
-      <div class="flex items-center gap-1 bg-white dark:bg-slate-900 p-1 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm">
-        <button id="btn-prev-month" type="button" title="Mês anterior" class="p-1.5 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-600 dark:text-slate-300 transition-colors">
-          <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"/></svg>
-        </button>
-
-        <select id="filter-month" aria-label="Selecionar Mês e Ano" class="text-xs sm:text-sm font-semibold bg-transparent text-slate-800 dark:text-slate-200 border-none focus:ring-0 cursor-pointer py-1 pl-2">
-          <!-- Preenchido dinamicamente via JS -->
-        </select>
-
-        <button id="btn-next-month" type="button" title="Próximo mês" class="p-1.5 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-600 dark:text-slate-300 transition-colors">
-          <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/></svg>
-        </button>
-      </div>
-    </div>
-
-    <!-- ======================================================================
-         CARDS DE RESUMO (KPIS)
-         ====================================================================== -->
-    <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-      
-      <!-- Card 1: Saldo Atual Realizado -->
-      <div class="bg-white dark:bg-slate-900 rounded-2xl p-5 border border-slate-200/90 dark:border-slate-800 shadow-sm relative overflow-hidden flex flex-col justify-between">
-        <div class="flex items-center justify-between">
-          <span class="text-xs font-semibold tracking-wider uppercase text-slate-500 dark:text-slate-400">Saldo Atual</span>
-          <div class="w-8 h-8 rounded-lg bg-emerald-100 dark:bg-emerald-950/60 text-emerald-600 dark:text-emerald-400 flex items-center justify-center">
-            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 9V7a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2m2 4h10a2 2 0 002-2v-6a2 2 0 00-2-2H9a2 2 0 00-2 2v6a2 2 0 002 2zm7-5a2 2 0 11-4 0 2 2 0 014 0z"/></svg>
-          </div>
-        </div>
-        <div class="mt-3">
-          <div id="kpi-balance" class="text-2xl sm:text-3xl font-extrabold text-emerald-600 dark:text-emerald-400">R$ 0,00</div>
-          <p id="kpi-balance-sub" class="text-xs text-slate-400 dark:text-slate-500 mt-1">Apenas realizados no mês</p>
-        </div>
-      </div>
-
-      <!-- Card 2: Previsão de Saldo -->
-      <div class="bg-white dark:bg-slate-900 rounded-2xl p-5 border border-slate-200/90 dark:border-slate-800 shadow-sm relative overflow-hidden flex flex-col justify-between">
-        <div class="flex items-center justify-between">
-          <span class="text-xs font-semibold tracking-wider uppercase text-slate-500 dark:text-slate-400">Previsão de Saldo</span>
-          <div class="w-8 h-8 rounded-lg bg-blue-100 dark:bg-blue-950/60 text-blue-600 dark:text-blue-400 flex items-center justify-center">
-            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"/></svg>
-          </div>
-        </div>
-        <div class="mt-3">
-          <div id="kpi-projected" class="text-2xl sm:text-3xl font-extrabold text-blue-600 dark:text-blue-400">R$ 0,00</div>
-          <p id="kpi-projected-sub" class="text-xs text-slate-400 dark:text-slate-500 mt-1">Considerando pendências</p>
-        </div>
-      </div>
-
-      <!-- Card 3: Total de Receitas -->
-      <div class="bg-white dark:bg-slate-900 rounded-2xl p-5 border border-slate-200/90 dark:border-slate-800 shadow-sm relative overflow-hidden flex flex-col justify-between">
-        <div class="flex items-center justify-between">
-          <span class="text-xs font-semibold tracking-wider uppercase text-slate-500 dark:text-slate-400">Receitas do Mês</span>
-          <div class="w-8 h-8 rounded-lg bg-emerald-100 dark:bg-emerald-950/60 text-emerald-600 dark:text-emerald-400 flex items-center justify-center">
-            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 11l5-5m0 0l5 5m-5-5v12"/></svg>
-          </div>
-        </div>
-        <div class="mt-3">
-          <div id="kpi-income" class="text-2xl sm:text-3xl font-extrabold text-slate-900 dark:text-white">R$ 0,00</div>
-          <p class="text-xs text-slate-400 dark:text-slate-500 mt-1">Total planejado/recebido</p>
-        </div>
-      </div>
-
-      <!-- Card 4: Total de Despesas -->
-      <div class="bg-white dark:bg-slate-900 rounded-2xl p-5 border border-slate-200/90 dark:border-slate-800 shadow-sm relative overflow-hidden flex flex-col justify-between">
-        <div class="flex items-center justify-between">
-          <span class="text-xs font-semibold tracking-wider uppercase text-slate-500 dark:text-slate-400">Despesas do Mês</span>
-          <div class="w-8 h-8 rounded-lg bg-rose-100 dark:bg-rose-950/60 text-rose-600 dark:text-rose-400 flex items-center justify-center">
-            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 13l-5 5m0 0l-5-5m5 5V6"/></svg>
-          </div>
-        </div>
-        <div class="mt-3">
-          <div id="kpi-expense" class="text-2xl sm:text-3xl font-extrabold text-slate-900 dark:text-white">R$ 0,00</div>
-          <p class="text-xs text-slate-400 dark:text-slate-500 mt-1">Total planejado/gasto</p>
-        </div>
-      </div>
-
-    </div>
-
-    <!-- ======================================================================
-         DASHBOARD GRÁFICO (CHART.JS)
-         ====================================================================== -->
-    <div class="grid grid-cols-1 lg:grid-cols-12 gap-6">
-      
-      <!-- Gráfico 1: Rosca de Despesas por Categoria (5 cols) -->
-      <div class="lg:col-span-5 bg-white dark:bg-slate-900 rounded-2xl p-5 border border-slate-200/90 dark:border-slate-800 shadow-sm flex flex-col">
-        <div class="flex items-center justify-between mb-4">
-          <div>
-            <h2 class="text-base font-bold text-slate-900 dark:text-white">Despesas por Categoria</h2>
-            <p class="text-xs text-slate-500 dark:text-slate-400">Distribuição no mês selecionado</p>
-          </div>
-          <span class="text-xs px-2.5 py-1 rounded-full bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 font-medium">
-            Rosca
-          </span>
-        </div>
-
-        <div class="flex-1 relative min-h-[260px] flex items-center justify-center">
-          <canvas id="chartCategory"></canvas>
-          <div id="chartCategoryEmpty" class="hidden text-center py-10">
-            <div class="w-12 h-12 mx-auto rounded-full bg-slate-100 dark:bg-slate-800 flex items-center justify-center text-slate-400 mb-2">
-              <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M11 3.055A9.001 9.001 0 1020.945 13H11V3.055z"/></svg>
+          <div class="mt-2 flex items-baseline gap-2">
+            <div id="kpi-balance" class="text-3xl sm:text-4xl font-extrabold tracking-tight text-white data-value">
+              R$ 0,00
             </div>
-            <p class="text-sm font-medium text-slate-600 dark:text-slate-300">Sem despesas registradas</p>
-            <p class="text-xs text-slate-400 mt-1">Adicione uma despesa para visualizar a distribuição.</p>
+          </div>
+
+          <!-- Barra Rápida de Orçamento no Card Hero -->
+          <div class="mt-4 pt-3 border-t border-slate-700/60">
+            <div class="flex items-center justify-between text-[11px] text-slate-300 mb-1.5">
+              <span>Orçamento Mensal Utilizado</span>
+              <span id="hero-budget-percentage" class="font-bold text-blue-300">0%</span>
+            </div>
+            <div class="w-full bg-slate-800 rounded-full h-2 overflow-hidden">
+              <div id="hero-budget-bar" class="h-full bg-blue-500 rounded-full transition-all duration-500" style="width: 0%"></div>
+            </div>
+            <div class="flex items-center justify-between text-[10px] text-slate-400 mt-1">
+              <span id="hero-budget-spent">Gasto: R$ 0,00</span>
+              <span id="hero-budget-limit">Teto: R$ 0,00</span>
+            </div>
+          </div>
+
+          <!-- Efeito decorativo de fundo -->
+          <div class="absolute -right-8 -bottom-8 w-36 h-36 bg-blue-500/10 rounded-full blur-2xl pointer-events-none"></div>
+        </div>
+
+        <!-- CARDS DE KPIS EM GRID (3 Colunas) -->
+        <div class="grid grid-cols-3 gap-2 sm:gap-4">
+          <!-- Receitas -->
+          <div class="bg-white dark:bg-slate-900 rounded-xl sm:rounded-2xl p-3 sm:p-4 border border-slate-200/90 dark:border-slate-800 shadow-sm flex flex-col justify-between">
+            <div class="flex items-center gap-1.5 text-[11px] sm:text-xs font-semibold text-emerald-600 dark:text-emerald-400">
+              <svg class="w-3.5 h-3.5 sm:w-4 sm:h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M7 11l5-5m0 0l5 5m-5-5v12"/></svg>
+              <span>Receitas</span>
+            </div>
+            <div id="kpi-income" class="mt-2 text-sm sm:text-xl font-bold text-slate-900 dark:text-white truncate data-value">
+              R$ 0,00
+            </div>
+          </div>
+
+          <!-- Despesas -->
+          <div class="bg-white dark:bg-slate-900 rounded-xl sm:rounded-2xl p-3 sm:p-4 border border-slate-200/90 dark:border-slate-800 shadow-sm flex flex-col justify-between">
+            <div class="flex items-center gap-1.5 text-[11px] sm:text-xs font-semibold text-rose-600 dark:text-rose-400">
+              <svg class="w-3.5 h-3.5 sm:w-4 sm:h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M17 13l-5 5m0 0l-5-5m5 5V6"/></svg>
+              <span>Despesas</span>
+            </div>
+            <div id="kpi-expense" class="mt-2 text-sm sm:text-xl font-bold text-slate-900 dark:text-white truncate data-value">
+              R$ 0,00
+            </div>
+          </div>
+
+          <!-- Previsão -->
+          <div class="bg-white dark:bg-slate-900 rounded-xl sm:rounded-2xl p-3 sm:p-4 border border-slate-200/90 dark:border-slate-800 shadow-sm flex flex-col justify-between">
+            <div class="flex items-center gap-1.5 text-[11px] sm:text-xs font-semibold text-blue-600 dark:text-blue-400">
+              <svg class="w-3.5 h-3.5 sm:w-4 sm:h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10"/></svg>
+              <span class="truncate">Previsão</span>
+            </div>
+            <div id="kpi-projected" class="mt-2 text-sm sm:text-xl font-bold text-slate-900 dark:text-white truncate data-value">
+              R$ 0,00
+            </div>
           </div>
         </div>
-      </div>
 
-      <!-- Gráfico 2: Comparativo 6 Meses (7 cols) -->
-      <div class="lg:col-span-7 bg-white dark:bg-slate-900 rounded-2xl p-5 border border-slate-200/90 dark:border-slate-800 shadow-sm flex flex-col">
-        <div class="flex items-center justify-between mb-4">
-          <div>
-            <h2 class="text-base font-bold text-slate-900 dark:text-white">Evolução dos Últimos 6 Meses</h2>
-            <p class="text-xs text-slate-500 dark:text-slate-400">Comparativo Receitas vs. Despesas</p>
-          </div>
-          <span class="text-xs px-2.5 py-1 rounded-full bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 font-medium">
-            Histórico
-          </span>
-        </div>
+        <!-- ATALHOS RÁPIDOS NO MOBILE (Quick Actions) -->
+        <div class="grid grid-cols-4 gap-2 pt-1">
+          <button type="button" onclick="App.openTransactionModalWithType('income')" class="flex flex-col items-center justify-center p-2.5 rounded-xl bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800/60 active:scale-95 transition-all text-center">
+            <div class="w-7 h-7 rounded-full bg-emerald-100 dark:bg-emerald-900 flex items-center justify-center mb-1">
+              <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/></svg>
+            </div>
+            <span class="text-[10px] font-bold">+ Receita</span>
+          </button>
 
-        <div class="flex-1 relative min-h-[260px]">
-          <canvas id="chartHistory"></canvas>
-        </div>
-      </div>
+          <button type="button" onclick="App.openTransactionModalWithType('expense')" class="flex flex-col items-center justify-center p-2.5 rounded-xl bg-rose-50 dark:bg-rose-950/40 text-rose-700 dark:text-rose-300 border border-rose-200 dark:border-rose-800/60 active:scale-95 transition-all text-center">
+            <div class="w-7 h-7 rounded-full bg-rose-100 dark:bg-rose-900 flex items-center justify-center mb-1">
+              <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20 12H4"/></svg>
+            </div>
+            <span class="text-[10px] font-bold">- Despesa</span>
+          </button>
 
-    </div>
+          <button type="button" onclick="App.switchTab('budgets')" class="flex flex-col items-center justify-center p-2.5 rounded-xl bg-blue-50 dark:bg-blue-950/40 text-blue-700 dark:text-blue-300 border border-blue-200 dark:border-blue-800/60 active:scale-95 transition-all text-center">
+            <div class="w-7 h-7 rounded-full bg-blue-100 dark:bg-blue-900 flex items-center justify-center mb-1">
+              <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10"/></svg>
+            </div>
+            <span class="text-[10px] font-bold">Metas</span>
+          </button>
 
-    <!-- ======================================================================
-         BARRA DE FILTROS & BUSCA
-         ====================================================================== -->
-    <div class="bg-white dark:bg-slate-900 rounded-2xl p-4 border border-slate-200/90 dark:border-slate-800 shadow-sm space-y-3">
-      <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-12 gap-3 items-center">
-        
-        <!-- Campo de Busca -->
-        <div class="lg:col-span-4 relative">
-          <div class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-slate-400">
-            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/></svg>
-          </div>
-          <input type="text" id="filter-search" placeholder="Buscar por descrição..." class="w-full pl-9 pr-3 py-2 text-xs sm:text-sm rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-800/60 text-slate-900 dark:text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500">
-        </div>
-
-        <!-- Filtro Tipo -->
-        <div class="lg:col-span-2">
-          <select id="filter-type" class="w-full py-2 pl-3 pr-8 text-xs sm:text-sm rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-800/60 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500 cursor-pointer">
-            <option value="all">Todos os Tipos</option>
-            <option value="income">Apenas Receitas</option>
-            <option value="expense">Apenas Despesas</option>
-          </select>
-        </div>
-
-        <!-- Filtro Categoria -->
-        <div class="lg:col-span-3">
-          <select id="filter-category" class="w-full py-2 pl-3 pr-8 text-xs sm:text-sm rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-800/60 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500 cursor-pointer">
-            <option value="all">Todas as Categorias</option>
-            <!-- Preenchido dinamicamente -->
-          </select>
-        </div>
-
-        <!-- Filtro Status -->
-        <div class="lg:col-span-2">
-          <select id="filter-status" class="w-full py-2 pl-3 pr-8 text-xs sm:text-sm rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-800/60 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500 cursor-pointer">
-            <option value="all">Todos os Status</option>
-            <option value="paid">Pagos / Recebidos</option>
-            <option value="pending">Pendentes</option>
-          </select>
-        </div>
-
-        <!-- Botão Limpar Filtros -->
-        <div class="lg:col-span-1">
-          <button id="btn-clear-filters" type="button" title="Limpar todos os filtros" class="w-full py-2 px-3 text-xs font-semibold rounded-xl border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors flex items-center justify-center gap-1">
-            <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
-            <span class="sm:hidden lg:hidden">Limpar</span>
+          <button type="button" onclick="App.openSyncModal()" class="flex flex-col items-center justify-center p-2.5 rounded-xl bg-purple-50 dark:bg-purple-950/40 text-purple-700 dark:text-purple-300 border border-purple-200 dark:border-purple-800/60 active:scale-95 transition-all text-center">
+            <div class="w-7 h-7 rounded-full bg-purple-100 dark:bg-purple-900 flex items-center justify-center mb-1">
+              <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"/></svg>
+            </div>
+            <span class="text-[10px] font-bold">Nuvem</span>
           </button>
         </div>
 
-      </div>
-    </div>
-
-    <!-- ======================================================================
-         LISTAGEM DE TRANSAÇÕES (TABELA / CARDS)
-         ====================================================================== -->
-    <div class="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200/90 dark:border-slate-800 shadow-sm overflow-hidden">
-      
-      <!-- Cabeçalho da Listagem -->
-      <div class="px-5 py-4 border-b border-slate-200/80 dark:border-slate-800 flex items-center justify-between">
-        <div class="flex items-center gap-2">
-          <h2 class="text-base font-bold text-slate-900 dark:text-white">Lançamentos</h2>
-          <span id="transactions-count-badge" class="px-2.5 py-0.5 text-xs font-medium rounded-full bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400">
-            0 lançamentos
-          </span>
-        </div>
-        <div class="text-xs text-slate-400 dark:text-slate-500 hidden sm:block">
-          Dica: clique no status para alternar entre Pago e Pendente
-        </div>
-      </div>
-
-      <!-- Tabela Responsiva -->
-      <div class="overflow-x-auto">
-        <table class="w-full text-left border-collapse">
-          <thead>
-            <tr class="bg-slate-50/75 dark:bg-slate-800/40 border-b border-slate-200 dark:border-slate-800 text-[11px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">
-              <th scope="col" class="py-3 px-4">Data</th>
-              <th scope="col" class="py-3 px-4">Descrição</th>
-              <th scope="col" class="py-3 px-4 hidden sm:table-cell">Categoria</th>
-              <th scope="col" class="py-3 px-4 hidden md:table-cell">Tipo</th>
-              <th scope="col" class="py-3 px-4">Status</th>
-              <th scope="col" class="py-3 px-4 text-right">Valor</th>
-              <th scope="col" class="py-3 px-4 text-right">Ações</th>
-            </tr>
-          </thead>
-          <tbody id="transactions-table-body" class="divide-y divide-slate-100 dark:divide-slate-800/60">
+        <!-- ÚLTIMOS LANÇAMENTOS DO MÊS -->
+        <div class="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200/90 dark:border-slate-800 shadow-sm p-4">
+          <div class="flex items-center justify-between mb-3">
+            <h3 class="text-xs sm:text-sm font-bold text-slate-900 dark:text-white uppercase tracking-wider">Últimos Lançamentos</h3>
+            <button type="button" onclick="App.switchTab('transactions')" class="text-xs font-semibold text-blue-600 dark:text-blue-400 hover:underline">
+              Ver Extrato Completo →
+            </button>
+          </div>
+          <div id="recent-transactions-list" class="divide-y divide-slate-100 dark:divide-slate-800/60">
             <!-- Renderizado dinamicamente via JS -->
-          </tbody>
-        </table>
-      </div>
-
-      <!-- Empty State caso não haja transações -->
-      <div id="transactions-empty-state" class="hidden py-14 px-4 text-center">
-        <div class="w-16 h-16 mx-auto rounded-2xl bg-blue-50 dark:bg-blue-950/40 text-blue-500 dark:text-blue-400 flex items-center justify-center mb-4">
-          <svg class="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01"/></svg>
+          </div>
         </div>
-        <h3 class="text-base font-bold text-slate-800 dark:text-slate-200">Nenhum lançamento encontrado</h3>
-        <p class="text-xs sm:text-sm text-slate-500 dark:text-slate-400 max-w-sm mx-auto mt-1 mb-5">
-          Não há transações cadastradas para este período ou com os filtros selecionados.
-        </p>
-        <div class="inline-flex items-center gap-3">
-          <button type="button" onclick="App.openTransactionModal()" class="px-4 py-2 text-xs font-semibold rounded-xl text-white bg-blue-600 hover:bg-blue-700 transition-colors shadow-sm">
-            Adicionar Lançamento
-          </button>
-          <button type="button" onclick="App.loadSampleData()" class="px-4 py-2 text-xs font-semibold rounded-xl text-slate-700 dark:text-slate-300 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors border border-slate-300/70 dark:border-slate-700">
-            Carregar Dados de Exemplo
-          </button>
+
+      </section>
+
+      <!-- ====================================================================
+           ABA 2: EXTRATO (TRANSAÇÕES COMPLETAS)
+           ==================================================================== -->
+      <section id="tab-transactions" class="space-y-4 hidden animate-fade-in">
+        
+        <!-- BARRA DE FILTROS & BUSCA RÁPIDA -->
+        <div class="bg-white dark:bg-slate-900 rounded-2xl p-3.5 border border-slate-200/90 dark:border-slate-800 shadow-sm space-y-3">
+          
+          <!-- Busca Textual -->
+          <div class="relative">
+            <div class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-slate-400">
+              <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/></svg>
+            </div>
+            <input type="text" id="filter-search" placeholder="Buscar por descrição..." class="w-full pl-9 pr-3 py-2 text-xs sm:text-sm rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500">
+          </div>
+
+          <!-- Chips de Filtro por Tipo -->
+          <div class="flex items-center gap-1.5 overflow-x-auto pb-1 text-xs">
+            <button type="button" onclick="App.setFilterType('all')" data-type-chip="all" class="px-3 py-1 rounded-full font-semibold bg-blue-600 text-white whitespace-nowrap">
+              Todos
+            </button>
+            <button type="button" onclick="App.setFilterType('income')" data-type-chip="income" class="px-3 py-1 rounded-full font-semibold bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-200 whitespace-nowrap">
+              Receitas
+            </button>
+            <button type="button" onclick="App.setFilterType('expense')" data-type-chip="expense" class="px-3 py-1 rounded-full font-semibold bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-200 whitespace-nowrap">
+              Despesas
+            </button>
+            <button type="button" onclick="App.setFilterStatus('pending')" data-status-chip="pending" class="px-3 py-1 rounded-full font-semibold bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-200 whitespace-nowrap">
+              Pendentes
+            </button>
+          </div>
+
+          <!-- Selects de Categoria e Conta -->
+          <div class="grid grid-cols-2 gap-2 pt-1 border-t border-slate-100 dark:border-slate-800">
+            <select id="filter-category" class="w-full py-1.5 pl-2 pr-6 text-xs rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white">
+              <option value="all">Todas Categorias</option>
+            </select>
+            <select id="filter-status" class="w-full py-1.5 pl-2 pr-6 text-xs rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white">
+              <option value="all">Todos Status</option>
+              <option value="paid">Pagos / Recebidos</option>
+              <option value="pending">Pendentes</option>
+            </select>
+            <!-- Select oculto sincronizado -->
+            <select id="filter-type" class="hidden">
+              <option value="all">all</option>
+              <option value="income">income</option>
+              <option value="expense">expense</option>
+            </select>
+          </div>
+
         </div>
-      </div>
 
-    </div>
+        <!-- LISTAGEM (Mobile Cards + Desktop Table) -->
+        <div class="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200/90 dark:border-slate-800 shadow-sm overflow-hidden">
+          
+          <div class="px-4 py-3 border-b border-slate-200/80 dark:border-slate-800 flex items-center justify-between">
+            <div class="flex items-center gap-2">
+              <h2 class="text-sm font-bold text-slate-900 dark:text-white">Transações</h2>
+              <span id="transactions-count-badge" class="px-2 py-0.5 text-[11px] font-medium rounded-full bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400">
+                0
+              </span>
+            </div>
+            <button id="btn-clear-filters" type="button" class="text-xs text-blue-600 dark:text-blue-400 hover:underline">
+              Limpar Filtros
+            </button>
+          </div>
 
-  </main>
+          <!-- Mobile Cards View (Otimizado 100% para celular) -->
+          <div id="mobile-transactions-list" class="divide-y divide-slate-100 dark:divide-slate-800/70 sm:hidden">
+            <!-- Renderizado dinamicamente via JS -->
+          </div>
 
-  <!-- ========================================================================
-       RODAPÉ (FOOTER)
-       ======================================================================== -->
-  <footer class="mt-auto border-t border-slate-200 dark:border-slate-800 bg-white/50 dark:bg-slate-900/50 py-6">
-    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex flex-col sm:flex-row items-center justify-between gap-4 text-xs text-slate-500 dark:text-slate-400">
-      <div class="flex items-center gap-2">
-        <span class="inline-block w-2 h-2 rounded-full bg-emerald-500"></span>
-        <span>100% Client-Side • Privacidade Total (Nenhum dado é enviado a servidores externos)</span>
-      </div>
-      <div>
-        <span>Pronto para GitHub Pages • Desenvolvido com Tailwind CSS & Chart.js</span>
-      </div>
-    </div>
-  </footer>
+          <!-- Desktop Table View (Telas médias e grandes) -->
+          <div class="hidden sm:block overflow-x-auto">
+            <table class="w-full text-left border-collapse">
+              <thead>
+                <tr class="bg-slate-50/75 dark:bg-slate-800/40 border-b border-slate-200 dark:border-slate-800 text-[11px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">
+                  <th scope="col" class="py-3 px-4">Data</th>
+                  <th scope="col" class="py-3 px-4">Descrição</th>
+                  <th scope="col" class="py-3 px-4">Categoria</th>
+                  <th scope="col" class="py-3 px-4">Conta</th>
+                  <th scope="col" class="py-3 px-4">Status</th>
+                  <th scope="col" class="py-3 px-4 text-right">Valor</th>
+                  <th scope="col" class="py-3 px-4 text-right">Ações</th>
+                </tr>
+              </thead>
+              <tbody id="transactions-table-body" class="divide-y divide-slate-100 dark:divide-slate-800/60">
+                <!-- Renderizado via JS -->
+              </tbody>
+            </table>
+          </div>
+
+          <!-- Empty State -->
+          <div id="transactions-empty-state" class="hidden py-12 px-4 text-center">
+            <div class="w-12 h-12 mx-auto rounded-full bg-blue-50 dark:bg-blue-950/40 text-blue-500 flex items-center justify-center mb-3">
+              <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"/></svg>
+            </div>
+            <h3 class="text-sm font-bold text-slate-800 dark:text-slate-200">Nenhum lançamento encontrado</h3>
+            <p class="text-xs text-slate-400 mt-1 mb-4">Adicione uma transação ou ajuste os filtros.</p>
+            <button type="button" onclick="App.openTransactionModal()" class="px-4 py-2 text-xs font-semibold rounded-xl text-white bg-blue-600 hover:bg-blue-700 shadow-sm">
+              Novo Lançamento
+            </button>
+          </div>
+
+        </div>
+
+      </section>
+
+      <!-- ====================================================================
+           ABA 3: RELATÓRIOS & GRÁFICOS
+           ==================================================================== -->
+      <section id="tab-reports" class="space-y-4 hidden animate-fade-in">
+        
+        <!-- CARDS DE MÉTRICAS ANALÍTICAS -->
+        <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
+          <div class="bg-white dark:bg-slate-900 rounded-2xl p-4 border border-slate-200/90 dark:border-slate-800 shadow-sm">
+            <span class="text-xs text-slate-400 font-medium">Taxa de Poupança</span>
+            <div id="report-savings-rate" class="text-2xl font-extrabold text-emerald-600 dark:text-emerald-400 mt-1">0%</div>
+            <p class="text-[11px] text-slate-400 mt-0.5">da receita guardada no mês</p>
+          </div>
+
+          <div class="bg-white dark:bg-slate-900 rounded-2xl p-4 border border-slate-200/90 dark:border-slate-800 shadow-sm">
+            <span class="text-xs text-slate-400 font-medium">Média de Gasto Diário</span>
+            <div id="report-daily-average" class="text-2xl font-extrabold text-slate-900 dark:text-white mt-1">R$ 0,00</div>
+            <p class="text-[11px] text-slate-400 mt-0.5">calculado sobre os dias do mês</p>
+          </div>
+
+          <div class="bg-white dark:bg-slate-900 rounded-2xl p-4 border border-slate-200/90 dark:border-slate-800 shadow-sm">
+            <span class="text-xs text-slate-400 font-medium">Maior Despesa</span>
+            <div id="report-highest-expense" class="text-2xl font-extrabold text-rose-600 dark:text-rose-400 mt-1">R$ 0,00</div>
+            <p id="report-highest-expense-name" class="text-[11px] text-slate-400 mt-0.5 truncate">-</p>
+          </div>
+        </div>
+
+        <!-- GRÁFICOS (Chart.js) -->
+        <div class="grid grid-cols-1 lg:grid-cols-12 gap-4">
+          
+          <!-- Rosca: Despesas por Categoria -->
+          <div class="lg:col-span-5 bg-white dark:bg-slate-900 rounded-2xl p-4 sm:p-5 border border-slate-200/90 dark:border-slate-800 shadow-sm flex flex-col">
+            <div class="flex items-center justify-between mb-2">
+              <h3 class="text-sm font-bold text-slate-900 dark:text-white">Despesas por Categoria</h3>
+              <span class="text-[11px] text-slate-400">Mês selecionado</span>
+            </div>
+            <div class="flex-1 relative min-h-[260px] flex items-center justify-center">
+              <canvas id="chartCategory"></canvas>
+              <div id="chartCategoryEmpty" class="hidden text-center py-8">
+                <p class="text-xs text-slate-400">Sem despesas registradas neste mês.</p>
+              </div>
+            </div>
+          </div>
+
+          <!-- Barras: Evolução dos 6 Meses -->
+          <div class="lg:col-span-7 bg-white dark:bg-slate-900 rounded-2xl p-4 sm:p-5 border border-slate-200/90 dark:border-slate-800 shadow-sm flex flex-col">
+            <div class="flex items-center justify-between mb-2">
+              <h3 class="text-sm font-bold text-slate-900 dark:text-white">Evolução dos Últimos 6 Meses</h3>
+              <span class="text-[11px] text-slate-400">Receitas vs. Despesas</span>
+            </div>
+            <div class="flex-1 relative min-h-[260px]">
+              <canvas id="chartHistory"></canvas>
+            </div>
+          </div>
+
+        </div>
+
+      </section>
+
+      <!-- ====================================================================
+           ABA 4: METAS & ORÇAMENTOS (BUDGETS)
+           ==================================================================== -->
+      <section id="tab-budgets" class="space-y-4 hidden animate-fade-in">
+        
+        <div class="bg-white dark:bg-slate-900 rounded-2xl p-4 sm:p-5 border border-slate-200/90 dark:border-slate-800 shadow-sm">
+          <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-4">
+            <div>
+              <h2 class="text-base font-bold text-slate-900 dark:text-white">Orçamentos & Metas do Mês</h2>
+              <p class="text-xs text-slate-400">Defina limites de gastos por categoria para manter suas finanças sob controle.</p>
+            </div>
+            <button type="button" onclick="App.openBudgetModal()" class="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-xl text-white bg-blue-600 hover:bg-blue-700 shadow-sm self-start sm:self-auto">
+              <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/></svg>
+              Definir Orçamento
+            </button>
+          </div>
+
+          <!-- Lista de Categorias com Progresso de Gasto -->
+          <div id="budgets-list-container" class="space-y-3">
+            <!-- Renderizado dinamicamente via JS -->
+          </div>
+        </div>
+
+      </section>
+
+    </main>
+
+    <!-- ======================================================================
+         BOTTOM NAVIGATION BAR (Exclusiva para Celular)
+         ====================================================================== -->
+    <nav class="md:hidden fixed bottom-0 left-0 right-0 z-40 bg-white/95 dark:bg-slate-900/95 border-t border-slate-200 dark:border-slate-800 glass-bottom-bar flex items-center justify-around h-16">
+      
+      <!-- Tab 1: Início -->
+      <button type="button" onclick="App.switchTab('overview')" data-bottom-tab="overview" class="flex flex-col items-center justify-center flex-1 h-full bottom-tab-active text-blue-600 dark:text-blue-400">
+        <svg class="w-5 h-5 mb-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6"/></svg>
+        <span class="text-[10px] font-medium">Início</span>
+      </button>
+
+      <!-- Tab 2: Extrato -->
+      <button type="button" onclick="App.switchTab('transactions')" data-bottom-tab="transactions" class="flex flex-col items-center justify-center flex-1 h-full text-slate-400 dark:text-slate-500 hover:text-slate-700">
+        <svg class="w-5 h-5 mb-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01"/></svg>
+        <span class="text-[10px] font-medium">Extrato</span>
+      </button>
+
+      <!-- Botão Central Novo (FAB / Quick Add) -->
+      <button type="button" onclick="App.openTransactionModal()" aria-label="Adicionar lançamento" class="flex items-center justify-center w-11 h-11 rounded-full bg-blue-600 text-white shadow-lg shadow-blue-600/40 -mt-4 active:scale-90 transition-transform">
+        <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M12 4v16m8-8H4"/></svg>
+      </button>
+
+      <!-- Tab 3: Gráficos -->
+      <button type="button" onclick="App.switchTab('reports')" data-bottom-tab="reports" class="flex flex-col items-center justify-center flex-1 h-full text-slate-400 dark:text-slate-500 hover:text-slate-700">
+        <svg class="w-5 h-5 mb-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 3.055A9.001 9.001 0 1020.945 13H11V3.055z"/><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20.488 9H15V3.512A9.025 9.025 0 0120.488 9z"/></svg>
+        <span class="text-[10px] font-medium">Gráficos</span>
+      </button>
+
+      <!-- Tab 4: Metas -->
+      <button type="button" onclick="App.switchTab('budgets')" data-bottom-tab="budgets" class="flex flex-col items-center justify-center flex-1 h-full text-slate-400 dark:text-slate-500 hover:text-slate-700">
+        <svg class="w-5 h-5 mb-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"/></svg>
+        <span class="text-[10px] font-medium">Metas</span>
+      </button>
+
+    </nav>
+
   </div>
   <!-- /app-root -->
 
   <!-- ========================================================================
-       MODAL: ADICIONAR / EDITAR LANÇAMENTO
+       MODAL: ADICIONAR / EDITAR LANÇAMENTO (Completo)
        ======================================================================== -->
-  <div id="modal-transaction" class="fixed inset-0 z-50 hidden items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm modal-backdrop-anim">
-    <div class="bg-white dark:bg-slate-900 w-full max-w-lg rounded-2xl shadow-2xl border border-slate-200 dark:border-slate-800 modal-card-anim overflow-hidden">
+  <div id="modal-transaction" class="fixed inset-0 z-50 hidden items-center justify-center p-3 sm:p-4 bg-slate-900/60 backdrop-blur-sm modal-backdrop-anim">
+    <div class="bg-white dark:bg-slate-900 w-full max-w-lg rounded-2xl shadow-2xl border border-slate-200 dark:border-slate-800 modal-card-anim overflow-hidden max-h-[92vh] flex flex-col">
       
-      <!-- Cabeçalho do Modal -->
-      <div class="px-6 py-4 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between">
+      <div class="px-5 py-3.5 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between">
         <h3 id="modal-transaction-title" class="text-base font-bold text-slate-900 dark:text-white">Novo Lançamento</h3>
-        <button id="btn-close-modal" type="button" class="p-1 rounded-lg text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors">
+        <button id="btn-close-modal" type="button" class="p-1 rounded-lg text-slate-400 hover:text-slate-600 dark:hover:text-slate-200">
           <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
         </button>
       </div>
 
-      <!-- Formulário -->
-      <form id="form-transaction" class="p-6 space-y-4">
+      <form id="form-transaction" class="p-5 space-y-3.5 overflow-y-auto flex-1">
         <input type="hidden" id="tx-id">
 
         <!-- Descrição -->
@@ -525,20 +644,18 @@
           <label for="tx-description" class="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
             Descrição <span class="text-rose-500">*</span>
           </label>
-          <input type="text" id="tx-description" required placeholder="Ex: Salário, Aluguel, Supermercado..." class="w-full px-3.5 py-2 text-sm rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500">
+          <input type="text" id="tx-description" required placeholder="Ex: Supermercado, Salário, Internet..." class="w-full px-3.5 py-2 text-sm rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500">
         </div>
 
         <!-- Valor & Tipo -->
-        <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+        <div class="grid grid-cols-2 gap-3">
           <div>
             <label for="tx-amount" class="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
               Valor (R$) <span class="text-rose-500">*</span>
             </label>
             <div class="relative">
-              <div class="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-slate-400 text-sm font-semibold">
-                R$
-              </div>
-              <input type="number" id="tx-amount" required step="0.01" min="0.01" placeholder="0,00" class="w-full pl-11 pr-3.5 py-2 text-sm rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500 font-semibold">
+              <span class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-xs font-bold text-slate-400">R$</span>
+              <input type="number" id="tx-amount" required step="0.01" min="0.01" placeholder="0,00" class="w-full pl-9 pr-3 py-2 text-sm rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white font-semibold focus:outline-none focus:ring-2 focus:ring-blue-500">
             </div>
           </div>
 
@@ -546,53 +663,129 @@
             <label for="tx-type" class="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
               Tipo <span class="text-rose-500">*</span>
             </label>
-            <select id="tx-type" required class="w-full px-3.5 py-2 text-sm rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500 cursor-pointer">
+            <select id="tx-type" required class="w-full px-3 py-2 text-sm rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white cursor-pointer">
               <option value="expense">Despesa (-)</option>
               <option value="income">Receita (+)</option>
             </select>
           </div>
         </div>
 
-        <!-- Categoria & Data -->
-        <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+        <!-- Categoria & Conta/Forma de Pagamento -->
+        <div class="grid grid-cols-2 gap-3">
           <div>
             <label for="tx-category" class="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
               Categoria <span class="text-rose-500">*</span>
             </label>
-            <select id="tx-category" required class="w-full px-3.5 py-2 text-sm rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500 cursor-pointer">
-              <!-- Preenchido dinamicamente via JS -->
+            <select id="tx-category" required class="w-full px-3 py-2 text-sm rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white cursor-pointer">
+              <!-- Preenchido via JS -->
             </select>
           </div>
 
           <div>
-            <label for="tx-date" class="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
-              Data <span class="text-rose-500">*</span>
+            <label for="tx-account" class="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
+              Conta / Forma
             </label>
-            <input type="date" id="tx-date" required class="w-full px-3.5 py-2 text-sm rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500 cursor-pointer">
+            <select id="tx-account" class="w-full px-3 py-2 text-sm rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white cursor-pointer">
+              <option value="Conta Corrente">Conta Corrente</option>
+              <option value="Cartão de Crédito">Cartão de Crédito</option>
+              <option value="Pix">Pix</option>
+              <option value="Dinheiro">Dinheiro / Carteira</option>
+              <option value="Boleto">Boleto</option>
+              <option value="Investimentos">Investimentos</option>
+            </select>
           </div>
         </div>
 
-        <!-- Status -->
-        <div>
-          <label for="tx-status" class="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
-            Status da Operação <span class="text-rose-500">*</span>
+        <!-- Data & Status -->
+        <div class="grid grid-cols-2 gap-3">
+          <div>
+            <label for="tx-date" class="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
+              Data <span class="text-rose-500">*</span>
+            </label>
+            <input type="date" id="tx-date" required class="w-full px-3 py-2 text-sm rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white cursor-pointer">
+          </div>
+
+          <div>
+            <label for="tx-status" class="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
+              Status <span class="text-rose-500">*</span>
+            </label>
+            <select id="tx-status" required class="w-full px-3 py-2 text-sm rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white cursor-pointer">
+              <option value="paid">Pago / Concluído</option>
+              <option value="pending">Pendente / Agendado</option>
+            </select>
+          </div>
+        </div>
+
+        <!-- Opção de Parcelamento / Repetição (Apenas para novos) -->
+        <div id="tx-repeat-wrapper" class="pt-2 border-t border-slate-100 dark:border-slate-800">
+          <label class="flex items-center gap-2 cursor-pointer mb-2">
+            <input type="checkbox" id="tx-repeat-checkbox" class="text-blue-600 rounded focus:ring-blue-500">
+            <span class="text-xs font-semibold text-slate-700 dark:text-slate-300">Repetir ou Parcelar lançamento</span>
           </label>
-          <select id="tx-status" required class="w-full px-3.5 py-2 text-sm rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500 cursor-pointer">
-            <option value="paid">Pago / Concluído</option>
-            <option value="pending">Pendente / Agendado</option>
+
+          <div id="tx-repeat-fields" class="hidden grid grid-cols-2 gap-3 pl-6">
+            <div>
+              <label for="tx-installments" class="block text-[11px] text-slate-500 mb-1">Número de Parcelas</label>
+              <select id="tx-installments" class="w-full px-2.5 py-1.5 text-xs rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white">
+                <option value="2">2x mensais</option>
+                <option value="3">3x mensais</option>
+                <option value="4">4x mensais</option>
+                <option value="5">5x mensais</option>
+                <option value="6">6x mensais</option>
+                <option value="10">10x mensais</option>
+                <option value="12">12x mensais</option>
+              </select>
+            </div>
+            <div class="text-[11px] text-slate-400 flex items-center">
+              Será criado 1 lançamento para cada mês consecutivo.
+            </div>
+          </div>
+        </div>
+
+        <div class="pt-3 border-t border-slate-200 dark:border-slate-800 flex items-center justify-end gap-2">
+          <button id="btn-cancel-modal" type="button" class="px-4 py-2 text-xs font-semibold rounded-xl text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800">
+            Cancelar
+          </button>
+          <button type="submit" class="px-5 py-2 text-xs font-semibold rounded-xl text-white bg-blue-600 hover:bg-blue-700 active:bg-blue-800 shadow-md shadow-blue-600/20">
+            Salvar
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- ========================================================================
+       MODAL: DEFINIR ORÇAMENTO / META POR CATEGORIA
+       ======================================================================== -->
+  <div id="modal-budget" class="fixed inset-0 z-50 hidden items-center justify-center p-3 sm:p-4 bg-slate-900/60 backdrop-blur-sm modal-backdrop-anim">
+    <div class="bg-white dark:bg-slate-900 w-full max-w-md rounded-2xl shadow-2xl border border-slate-200 dark:border-slate-800 modal-card-anim p-5">
+      <h3 class="text-base font-bold text-slate-900 dark:text-white mb-1">Definir Orçamento Mensal</h3>
+      <p class="text-xs text-slate-400 mb-4">Escolha a categoria e o limite máximo que planeja gastar por mês.</p>
+
+      <form id="form-budget" class="space-y-3.5">
+        <div>
+          <label for="budget-category" class="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">Categoria</label>
+          <select id="budget-category" required class="w-full px-3 py-2 text-sm rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white">
+            <!-- Preenchido via JS -->
           </select>
         </div>
 
-        <!-- Botões de Ação -->
-        <div class="pt-4 border-t border-slate-200 dark:border-slate-800 flex items-center justify-end gap-3">
-          <button id="btn-cancel-modal" type="button" class="px-4 py-2 text-xs sm:text-sm font-semibold rounded-xl text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors">
-            Cancelar
-          </button>
-          <button type="submit" class="px-5 py-2 text-xs sm:text-sm font-semibold rounded-xl text-white bg-blue-600 hover:bg-blue-700 active:bg-blue-800 shadow-md shadow-blue-600/20 transition-all">
-            Salvar Lançamento
-          </button>
+        <div>
+          <label for="budget-limit" class="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">Limite Mensal (R$)</label>
+          <div class="relative">
+            <span class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-xs font-bold text-slate-400">R$</span>
+            <input type="number" id="budget-limit" required step="1" min="1" placeholder="Ex: 800" class="w-full pl-9 pr-3 py-2 text-sm rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white font-semibold">
+          </div>
         </div>
 
+        <div class="pt-3 border-t border-slate-200 dark:border-slate-800 flex items-center justify-end gap-2">
+          <button id="btn-cancel-budget" type="button" class="px-4 py-2 text-xs font-semibold rounded-xl text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800">
+            Cancelar
+          </button>
+          <button type="submit" class="px-5 py-2 text-xs font-semibold rounded-xl text-white bg-blue-600 hover:bg-blue-700 shadow-md shadow-blue-600/20">
+            Salvar Limite
+          </button>
+        </div>
       </form>
     </div>
   </div>
@@ -601,27 +794,25 @@
        MODAL: CONFIRMAÇÃO DE EXCLUSÃO
        ======================================================================== -->
   <div id="modal-delete" class="fixed inset-0 z-50 hidden items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm modal-backdrop-anim">
-    <div class="bg-white dark:bg-slate-900 w-full max-w-md rounded-2xl shadow-2xl border border-slate-200 dark:border-slate-800 modal-card-anim p-6 text-center">
-      <div class="w-14 h-14 mx-auto rounded-full bg-rose-100 dark:bg-rose-950/60 text-rose-600 dark:text-rose-400 flex items-center justify-center mb-4">
-        <svg class="w-7 h-7" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/></svg>
+    <div class="bg-white dark:bg-slate-900 w-full max-w-sm rounded-2xl shadow-2xl border border-slate-200 dark:border-slate-800 modal-card-anim p-6 text-center">
+      <div class="w-12 h-12 mx-auto rounded-full bg-rose-100 dark:bg-rose-950/60 text-rose-600 flex items-center justify-center mb-3">
+        <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/></svg>
       </div>
 
       <h3 class="text-base font-bold text-slate-900 dark:text-white">Confirmar Exclusão</h3>
-      <p class="text-xs sm:text-sm text-slate-500 dark:text-slate-400 mt-2">
-        Tem certeza de que deseja excluir o lançamento:
-      </p>
+      <p class="text-xs text-slate-400 mt-1">Deseja realmente apagar este lançamento?</p>
 
-      <div class="mt-3 py-2 px-3 bg-slate-50 dark:bg-slate-800/60 rounded-xl border border-slate-200/80 dark:border-slate-700/60 text-left">
-        <div id="delete-modal-description" class="font-semibold text-slate-800 dark:text-slate-200 text-sm truncate">...</div>
-        <div id="delete-modal-amount" class="text-xs text-slate-500 dark:text-slate-400 mt-0.5">...</div>
+      <div class="mt-3 p-2.5 bg-slate-50 dark:bg-slate-800/60 rounded-xl border border-slate-200/80 dark:border-slate-700/60 text-left">
+        <div id="delete-modal-description" class="font-semibold text-slate-800 dark:text-slate-200 text-xs truncate">...</div>
+        <div id="delete-modal-amount" class="text-[11px] text-slate-400 mt-0.5">...</div>
       </div>
 
-      <div class="mt-6 flex items-center justify-center gap-3">
-        <button id="btn-cancel-delete" type="button" class="w-full py-2.5 text-xs sm:text-sm font-semibold rounded-xl text-slate-700 dark:text-slate-300 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors">
+      <div class="mt-5 flex items-center justify-center gap-2">
+        <button id="btn-cancel-delete" type="button" class="w-full py-2 text-xs font-semibold rounded-xl text-slate-700 dark:text-slate-300 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200">
           Cancelar
         </button>
-        <button id="btn-confirm-delete" type="button" class="w-full py-2.5 text-xs sm:text-sm font-semibold rounded-xl text-white bg-rose-600 hover:bg-rose-700 active:bg-rose-800 shadow-md shadow-rose-600/20 transition-all">
-          Sim, Excluir
+        <button id="btn-confirm-delete" type="button" class="w-full py-2 text-xs font-semibold rounded-xl text-white bg-rose-600 hover:bg-rose-700 shadow-md shadow-rose-600/20">
+          Excluir
         </button>
       </div>
     </div>
@@ -631,54 +822,32 @@
        MODAL: IMPORTAR BACKUP JSON
        ======================================================================== -->
   <div id="modal-import" class="fixed inset-0 z-50 hidden items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm modal-backdrop-anim">
-    <div class="bg-white dark:bg-slate-900 w-full max-w-lg rounded-2xl shadow-2xl border border-slate-200 dark:border-slate-800 modal-card-anim overflow-hidden">
-      
-      <div class="px-6 py-4 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between">
-        <h3 class="text-base font-bold text-slate-900 dark:text-white">Importar Dados (JSON)</h3>
-        <button id="btn-close-import" type="button" class="p-1 rounded-lg text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors">
+    <div class="bg-white dark:bg-slate-900 w-full max-w-md rounded-2xl shadow-2xl border border-slate-200 dark:border-slate-800 modal-card-anim p-5">
+      <div class="flex items-center justify-between pb-3 border-b border-slate-200 dark:border-slate-800">
+        <h3 class="text-sm font-bold text-slate-900 dark:text-white">Importar Dados (JSON)</h3>
+        <button id="btn-close-import" type="button" class="text-slate-400 hover:text-slate-600">
           <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
         </button>
       </div>
 
-      <div class="p-6 space-y-4">
-        <div>
-          <label class="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-2">
-            Selecione o arquivo de backup (.json):
-          </label>
-          <input type="file" id="import-file-input" accept=".json" class="block w-full text-xs text-slate-500 file:mr-4 file:py-2 file:px-4 file:rounded-xl file:border-0 file:text-xs file:font-semibold file:bg-blue-50 file:text-blue-700 dark:file:bg-blue-950/50 dark:file:text-blue-300 hover:file:bg-blue-100 cursor-pointer">
-        </div>
+      <div class="py-4 space-y-3">
+        <input type="file" id="import-file-input" accept=".json" class="block w-full text-xs text-slate-500 file:mr-3 file:py-1.5 file:px-3 file:rounded-xl file:border-0 file:text-xs file:font-semibold file:bg-blue-50 file:text-blue-700 dark:file:bg-blue-950/50 dark:file:text-blue-300">
 
-        <div class="space-y-2 pt-2">
-          <label class="block text-xs font-semibold text-slate-700 dark:text-slate-300">
-            Modo de Importação:
+        <div class="space-y-1.5 text-xs text-slate-700 dark:text-slate-300">
+          <label class="flex items-center gap-2 p-2 rounded-lg border border-slate-200 dark:border-slate-800 cursor-pointer">
+            <input type="radio" name="import-mode" value="replace" checked class="text-blue-600">
+            <span>Substituir dados atuais</span>
           </label>
-          
-          <label class="flex items-start gap-2.5 p-3 rounded-xl border border-slate-200 dark:border-slate-800 hover:bg-slate-50 dark:hover:bg-slate-800/40 cursor-pointer">
-            <input type="radio" name="import-mode" value="replace" checked class="mt-0.5 text-blue-600 focus:ring-blue-500">
-            <div>
-              <div class="text-xs font-semibold text-slate-900 dark:text-slate-100">Substituir dados existentes</div>
-              <div class="text-[11px] text-slate-500 dark:text-slate-400">Apaga os lançamentos atuais e carrega apenas os do arquivo.</div>
-            </div>
-          </label>
-
-          <label class="flex items-start gap-2.5 p-3 rounded-xl border border-slate-200 dark:border-slate-800 hover:bg-slate-50 dark:hover:bg-slate-800/40 cursor-pointer">
-            <input type="radio" name="import-mode" value="merge" class="mt-0.5 text-blue-600 focus:ring-blue-500">
-            <div>
-              <div class="text-xs font-semibold text-slate-900 dark:text-slate-100">Mesclar com os dados atuais</div>
-              <div class="text-[11px] text-slate-500 dark:text-slate-400">Adiciona os novos lançamentos mantendo os que você já possui.</div>
-            </div>
+          <label class="flex items-center gap-2 p-2 rounded-lg border border-slate-200 dark:border-slate-800 cursor-pointer">
+            <input type="radio" name="import-mode" value="merge" class="text-blue-600">
+            <span>Mesclar com os dados atuais</span>
           </label>
         </div>
+      </div>
 
-        <div class="pt-4 border-t border-slate-200 dark:border-slate-800 flex items-center justify-end gap-3">
-          <button id="btn-cancel-import" type="button" class="px-4 py-2 text-xs sm:text-sm font-semibold rounded-xl text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors">
-            Cancelar
-          </button>
-          <button id="btn-process-import" type="button" class="px-5 py-2 text-xs sm:text-sm font-semibold rounded-xl text-white bg-blue-600 hover:bg-blue-700 active:bg-blue-800 shadow-md shadow-blue-600/20 transition-all">
-            Importar
-          </button>
-        </div>
-
+      <div class="flex justify-end gap-2 pt-2 border-t border-slate-200 dark:border-slate-800">
+        <button id="btn-cancel-import" type="button" class="px-3 py-1.5 text-xs font-semibold rounded-xl text-slate-600 dark:text-slate-300 hover:bg-slate-100">Cancelar</button>
+        <button id="btn-process-import" type="button" class="px-4 py-1.5 text-xs font-semibold rounded-xl text-white bg-blue-600 hover:bg-blue-700 shadow-sm">Importar</button>
       </div>
     </div>
   </div>
@@ -687,27 +856,25 @@
        MODAL: ALTERAR SENHA
        ======================================================================== -->
   <div id="modal-password" class="fixed inset-0 z-50 hidden items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm modal-backdrop-anim">
-    <div class="bg-white dark:bg-slate-900 w-full max-w-md rounded-2xl shadow-2xl border border-slate-200 dark:border-slate-800 modal-card-anim overflow-hidden">
-      <div class="px-6 py-4 border-b border-slate-200 dark:border-slate-800">
-        <h3 class="text-base font-bold text-slate-900 dark:text-white">Alterar Senha</h3>
-      </div>
-      <form id="form-password" class="p-6 space-y-4">
+    <div class="bg-white dark:bg-slate-900 w-full max-w-md rounded-2xl shadow-2xl border border-slate-200 dark:border-slate-800 modal-card-anim p-5">
+      <h3 class="text-sm font-bold text-slate-900 dark:text-white mb-3">Alterar Senha do Cofre</h3>
+      <form id="form-password" class="space-y-3">
         <input type="text" name="username" value="fincontrol" autocomplete="username" class="hidden" tabindex="-1" aria-hidden="true">
         <div>
           <label for="pwd-current" class="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">Senha atual</label>
-          <input type="password" id="pwd-current" required autocomplete="current-password" class="w-full px-3.5 py-2 text-sm rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500">
+          <input type="password" id="pwd-current" required class="w-full px-3 py-1.5 text-sm rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white">
         </div>
         <div>
-          <label for="pwd-new" class="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">Nova senha</label>
-          <input type="password" id="pwd-new" required minlength="8" autocomplete="new-password" class="w-full px-3.5 py-2 text-sm rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500">
+          <label for="pwd-new" class="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">Nova senha (mínimo 8 caracteres)</label>
+          <input type="password" id="pwd-new" required minlength="8" class="w-full px-3 py-1.5 text-sm rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white">
         </div>
         <div>
           <label for="pwd-confirm" class="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">Confirmar nova senha</label>
-          <input type="password" id="pwd-confirm" required minlength="8" autocomplete="new-password" class="w-full px-3.5 py-2 text-sm rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500">
+          <input type="password" id="pwd-confirm" required minlength="8" class="w-full px-3 py-1.5 text-sm rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white">
         </div>
-        <div class="pt-4 border-t border-slate-200 dark:border-slate-800 flex items-center justify-end gap-3">
-          <button id="btn-cancel-password" type="button" class="px-4 py-2 text-xs sm:text-sm font-semibold rounded-xl text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors">Cancelar</button>
-          <button id="btn-save-password" type="submit" class="px-5 py-2 text-xs sm:text-sm font-semibold rounded-xl text-white bg-blue-600 hover:bg-blue-700 disabled:opacity-60 shadow-md shadow-blue-600/20 transition-all">Salvar nova senha</button>
+        <div class="pt-3 border-t border-slate-200 dark:border-slate-800 flex justify-end gap-2">
+          <button id="btn-cancel-password" type="button" class="px-3 py-1.5 text-xs font-semibold rounded-xl text-slate-600 dark:text-slate-300">Cancelar</button>
+          <button id="btn-save-password" type="submit" class="px-4 py-1.5 text-xs font-semibold rounded-xl text-white bg-blue-600 hover:bg-blue-700 shadow-sm">Salvar</button>
         </div>
       </form>
     </div>
@@ -716,119 +883,79 @@
   <!-- ========================================================================
        MODAL: SINCRONIZAÇÃO EM NUVEM (GITHUB GIST)
        ======================================================================== -->
-  <div id="modal-sync" class="fixed inset-0 z-50 hidden items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm modal-backdrop-anim">
-    <div class="bg-white dark:bg-slate-900 w-full max-w-lg rounded-2xl shadow-2xl border border-slate-200 dark:border-slate-800 modal-card-anim overflow-hidden">
-      
-      <!-- Cabeçalho -->
-      <div class="px-6 py-4 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between">
-        <div class="flex items-center gap-2">
-          <div class="w-8 h-8 rounded-lg bg-blue-100 dark:bg-blue-950/60 text-blue-600 dark:text-blue-400 flex items-center justify-center">
-            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"/>
-            </svg>
-          </div>
-          <div>
-            <h3 class="text-base font-bold text-slate-900 dark:text-white">Sincronização em Nuvem</h3>
-            <p class="text-xs text-slate-500 dark:text-slate-400">Celular, computador e tablet sincronizados</p>
-          </div>
-        </div>
-        <button id="btn-close-sync" type="button" class="p-1 rounded-lg text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors">
+  <div id="modal-sync" class="fixed inset-0 z-50 hidden items-center justify-center p-3 sm:p-4 bg-slate-900/60 backdrop-blur-sm modal-backdrop-anim">
+    <div class="bg-white dark:bg-slate-900 w-full max-w-md rounded-2xl shadow-2xl border border-slate-200 dark:border-slate-800 modal-card-anim p-5">
+      <div class="flex items-center justify-between pb-3 border-b border-slate-200 dark:border-slate-800">
+        <h3 class="text-sm font-bold text-slate-900 dark:text-white flex items-center gap-1.5">
+          <svg class="w-4 h-4 text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"/></svg>
+          Sincronização em Nuvem
+        </h3>
+        <button id="btn-close-sync" type="button" class="text-slate-400 hover:text-slate-600">
           <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
         </button>
       </div>
 
-      <div class="p-6 space-y-4">
-
-        <!-- Mensagem de erro -->
+      <div class="py-4 space-y-3">
         <div id="sync-error" role="alert" class="hidden text-xs px-3 py-2 rounded-xl bg-rose-50 dark:bg-rose-950/40 text-rose-700 dark:text-rose-300 border border-rose-200 dark:border-rose-900"></div>
 
-        <!-- MODO: CONECTADO -->
-        <div id="sync-connected" class="space-y-4 hidden">
-          <div class="p-4 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200/80 dark:border-slate-700/60 space-y-2">
-            <div class="flex items-center justify-between">
-              <span class="text-xs font-semibold text-slate-700 dark:text-slate-300">Status da Sincronização:</span>
-              <span class="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-xs font-medium bg-emerald-100 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300">
-                <span class="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
-                Ativa
-              </span>
+        <!-- Conectado -->
+        <div id="sync-connected" class="space-y-3 hidden">
+          <div class="p-3 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 text-xs">
+            <div class="flex items-center justify-between mb-1">
+              <span class="font-semibold text-slate-700 dark:text-slate-300">Status:</span>
+              <span class="text-emerald-600 dark:text-emerald-400 font-bold">Ativa</span>
             </div>
-            <p id="sync-status-text" class="text-xs text-slate-500 dark:text-slate-400 font-mono">Sincronizado</p>
-            <div class="pt-2 text-[11px] text-slate-400">
-              Gist de backup criptografado: 
-              <a id="sync-gist-link" href="#" target="_blank" rel="noopener noreferrer" class="text-blue-600 dark:text-blue-400 hover:underline inline-flex items-center gap-1">
-                Ver no GitHub
-                <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"/></svg>
+            <p id="sync-status-text" class="text-slate-500 font-mono text-[11px]">Sincronizado</p>
+            <div class="pt-2 text-[11px]">
+              <a id="sync-gist-link" href="#" target="_blank" rel="noopener noreferrer" class="text-blue-600 dark:text-blue-400 hover:underline">
+                Ver Gist Privado no GitHub →
               </a>
             </div>
           </div>
-
-          <div class="flex items-center justify-between pt-2">
-            <button id="btn-sync-disconnect" type="button" class="text-xs text-rose-600 dark:text-rose-400 hover:underline">
-              Desconectar deste aparelho
-            </button>
-            <button id="btn-sync-now" type="button" class="inline-flex items-center gap-1.5 px-4 py-2 text-xs font-semibold rounded-xl text-white bg-blue-600 hover:bg-blue-700 active:bg-blue-800 transition-colors shadow-sm">
-              <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg>
-              Sincronizar Agora
-            </button>
+          <div class="flex items-center justify-between pt-1">
+            <button id="btn-sync-disconnect" type="button" class="text-xs text-rose-600 hover:underline">Desconectar</button>
+            <button id="btn-sync-now" type="button" class="px-3 py-1.5 text-xs font-semibold rounded-xl text-white bg-blue-600 hover:bg-blue-700 shadow-sm">Sincronizar Agora</button>
           </div>
         </div>
 
-        <!-- MODO: CONFIGURAÇÃO / DESCONECTADO -->
-        <div id="sync-setup" class="space-y-4">
-          <p class="text-xs text-slate-600 dark:text-slate-300 leading-relaxed">
-            Seus dados são salvos em um <strong>Gist Privado</strong> na sua conta do GitHub, <strong>já criptografados</strong> com sua senha. Nem o GitHub consegue ler o conteúdo.
+        <!-- Desconectado / Configuração -->
+        <div id="sync-setup" class="space-y-3 text-xs">
+          <p class="text-slate-500">
+            Conecte ao seu GitHub para manter seu celular e computador sincronizados. Os dados são enviados <strong>100% criptografados</strong>.
           </p>
 
-          <div class="space-y-3">
-            <div>
-              <div class="flex items-center justify-between mb-1">
-                <label for="sync-token" class="text-xs font-semibold text-slate-700 dark:text-slate-300">
-                  GitHub Personal Access Token (classic) <span class="text-rose-500">*</span>
-                </label>
-                <a href="https://github.com/settings/tokens/new?scopes=gist&description=FinControl" target="_blank" rel="noopener noreferrer" class="text-[11px] text-blue-600 dark:text-blue-400 hover:underline inline-flex items-center gap-0.5">
-                  Criar token no GitHub
-                  <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"/></svg>
-                </a>
-              </div>
-              <input type="password" id="sync-token" placeholder="ghp_••••••••••••••••••••" class="w-full px-3.5 py-2 text-sm rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500 font-mono">
-              <p class="text-[11px] text-slate-400 mt-1">Marque apenas o escopo <strong>gist</strong> ao gerar o token.</p>
+          <div>
+            <div class="flex items-center justify-between mb-1">
+              <label for="sync-token" class="font-semibold text-slate-700 dark:text-slate-300">GitHub Personal Access Token</label>
+              <a href="https://github.com/settings/tokens/new?scopes=gist&description=FinControl" target="_blank" rel="noopener noreferrer" class="text-[10px] text-blue-600 dark:text-blue-400 hover:underline">Criar Token</a>
             </div>
-
-            <div>
-              <label for="sync-password" class="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
-                Sua senha atual do FinControl <span class="text-rose-500">*</span>
-              </label>
-              <input type="password" id="sync-password" placeholder="••••••••" class="w-full px-3.5 py-2 text-sm rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500">
-              <p class="text-[11px] text-slate-400 mt-1">Necessária para confirmar que você é o proprietário dos dados.</p>
-            </div>
-
-            <label class="flex items-start gap-2 pt-1 cursor-pointer">
-              <input type="checkbox" id="sync-overwrite" class="mt-0.5 text-blue-600 focus:ring-blue-500 rounded">
-              <span class="text-xs text-slate-600 dark:text-slate-400">
-                Substituir os dados da nuvem se houver conflito de senha.
-              </span>
-            </label>
+            <input type="password" id="sync-token" placeholder="ghp_••••••••••••••••••••" class="w-full px-3 py-2 text-xs rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white font-mono">
           </div>
 
-          <div class="pt-2 border-t border-slate-200 dark:border-slate-800 flex justify-end">
-            <button id="btn-sync-connect" type="button" class="w-full sm:w-auto px-5 py-2.5 text-xs sm:text-sm font-semibold rounded-xl text-white bg-blue-600 hover:bg-blue-700 active:bg-blue-800 transition-all shadow-md shadow-blue-600/20">
+          <div>
+            <label for="sync-password" class="block font-semibold text-slate-700 dark:text-slate-300 mb-1">Senha atual do app</label>
+            <input type="password" id="sync-password" placeholder="••••••••" class="w-full px-3 py-2 text-xs rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white">
+          </div>
+
+          <label class="flex items-start gap-1.5 cursor-pointer pt-1">
+            <input type="checkbox" id="sync-overwrite" class="mt-0.5 text-blue-600 rounded">
+            <span class="text-[11px] text-slate-500">Substituir dados da nuvem se houver conflito de senha</span>
+          </label>
+
+          <div class="pt-2 flex justify-end">
+            <button id="btn-sync-connect" type="button" class="w-full px-4 py-2 text-xs font-semibold rounded-xl text-white bg-blue-600 hover:bg-blue-700 shadow-sm">
               Conectar e sincronizar
             </button>
           </div>
         </div>
-
       </div>
     </div>
   </div>
 
-  <!-- ========================================================================
-       TOAST CONTAINER FLUTUANTE
-       ======================================================================== -->
-  <div id="toast-container" class="fixed bottom-5 right-5 z-50 flex flex-col gap-2 max-w-sm w-full pointer-events-none">
-    <!-- Toasts gerados dinamicamente via JS -->
-  </div>
+  <!-- TOAST CONTAINER FLUTUANTE -->
+  <div id="toast-container" class="fixed top-3 right-3 left-3 sm:left-auto sm:right-5 sm:bottom-5 sm:top-auto z-[70] flex flex-col gap-2 max-w-sm pointer-events-none"></div>
 
-  <!-- Script da Aplicação -->
+  <!-- Scripts -->
   <script src="js/app.js"></script>
 </body>
 </html>
