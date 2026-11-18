@@ -1483,6 +1483,33 @@ const App = {
       });
     });
 
+    // Botão de Valor R$ 0 (Variável)
+    document.getElementById('btn-set-zero-amount')?.addEventListener('click', () => {
+      const amountInput = document.getElementById('tx-amount');
+      if (amountInput) {
+        amountInput.value = '0';
+        this.updateRepeatSummary();
+      }
+    });
+
+    // Sugestões de contas variáveis rápidas (Água, Energia, Mercado...)
+    document.querySelectorAll('.btn-quick-desc').forEach(btn => {
+      btn.addEventListener('click', (e) => {
+        const desc = e.currentTarget.getAttribute('data-desc');
+        const cat = e.currentTarget.getAttribute('data-cat');
+        const descInput = document.getElementById('tx-description');
+        const catSelect = document.getElementById('tx-category');
+        const amountInput = document.getElementById('tx-amount');
+
+        if (descInput && desc) descInput.value = desc;
+        if (catSelect && cat) catSelect.value = cat;
+        if (amountInput && (!amountInput.value || parseFloat(amountInput.value) === 0)) {
+          amountInput.value = '0';
+          this.updateRepeatSummary();
+        }
+      });
+    });
+
     // Navegação de Mês
     document.getElementById('btn-prev-month')?.addEventListener('click', () => {
       this.state.filters.month = Utils.addMonths(this.state.filters.month, -1);
@@ -1736,7 +1763,10 @@ const App = {
       const catColor = catObj ? catObj.color : '#64748b';
       const accountBadge = t.account ? `<span class="px-1.5 py-0.5 rounded text-[10px] bg-slate-100 dark:bg-slate-800 text-slate-500 font-medium">${Utils.escapeHtml(t.account)}</span>` : '';
 
-      const amountFormatted = (isIncome ? '+ ' : '- ') + this.formatDisplayValue(t.amount);
+      const isZero = Number(t.amount) === 0;
+      const amountFormatted = isZero
+        ? `<span class="text-amber-500 font-bold">R$ 0,00 <span class="text-[10px] font-normal text-amber-600 dark:text-amber-300">(Variável)</span></span>`
+        : ((isIncome ? '+ ' : '- ') + this.formatDisplayValue(t.amount));
       const amountColor = isIncome ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-600 dark:text-rose-400';
 
       const statusBadge = isPaid
@@ -1817,7 +1847,10 @@ const App = {
             <span class="w-1.5 h-1.5 rounded-full bg-amber-500 status-pulse"></span> Pendente
            </button>`;
 
-      const amountFormatted = (isIncome ? '+ ' : '- ') + this.formatDisplayValue(t.amount);
+      const isZero = Number(t.amount) === 0;
+      const amountFormatted = isZero
+        ? `<span class="text-amber-500 font-bold">R$ 0,00 <span class="text-[11px] font-normal text-amber-600 dark:text-amber-300">(Variável)</span></span>`
+        : ((isIncome ? '+ ' : '- ') + this.formatDisplayValue(t.amount));
       const amountColor = isIncome ? 'text-emerald-600 dark:text-emerald-400 font-bold' : 'text-rose-600 dark:text-rose-400 font-bold';
 
       return `
@@ -2068,7 +2101,7 @@ const App = {
                 </div>
               </div>
               <div class="text-right flex items-center gap-2 flex-shrink-0">
-                <span class="font-bold text-rose-600 dark:text-rose-400">${this.formatDisplayValue(t.amount)}</span>
+                <span class="font-bold ${Number(t.amount) === 0 ? 'text-amber-500' : 'text-rose-600 dark:text-rose-400'}">${Number(t.amount) === 0 ? 'R$ 0 (Variável)' : this.formatDisplayValue(t.amount)}</span>
                 <button type="button" onclick="App.payBill('${t.id}')" title="Marcar como Paga" class="px-2.5 py-1 rounded-lg text-xs font-bold bg-emerald-600 hover:bg-emerald-700 text-white shadow-sm active:scale-95 transition-all">
                   Pagar
                 </button>
@@ -2182,8 +2215,8 @@ const App = {
           </div>
 
           <div class="text-right flex items-center gap-3 flex-shrink-0">
-            <div class="text-xs sm:text-sm font-extrabold ${isPaid ? 'text-slate-500 line-through' : 'text-rose-600 dark:text-rose-400'}">
-              ${this.formatDisplayValue(t.amount)}
+            <div class="text-xs sm:text-sm font-extrabold ${Number(t.amount) === 0 ? 'text-amber-500' : (isPaid ? 'text-slate-500 line-through' : 'text-rose-600 dark:text-rose-400')}">
+              ${Number(t.amount) === 0 ? 'R$ 0,00 <span class="text-[10px] font-normal text-amber-600 dark:text-amber-300 block sm:inline">(Variável)</span>' : this.formatDisplayValue(t.amount)}
             </div>
             ${actionButton}
             <div class="flex items-center">
@@ -2200,6 +2233,17 @@ const App = {
   payBill(id) {
     const tx = this.state.transactions.find(t => t.id === id);
     if (!tx) return;
+
+    if (Number(tx.amount) === 0) {
+      const input = prompt(`A conta "${tx.description}" está com valor R$ 0,00 (variável).\nInforme o valor pago da fatura (ex: 85,50):`);
+      if (input === null) return; // cancelado
+      const parsed = parseFloat(input.replace(',', '.'));
+      if (isNaN(parsed) || parsed < 0) {
+        Toast.show('Valor inválido. A conta não foi baixada.', 'warning');
+        return;
+      }
+      tx.amount = parsed;
+    }
 
     tx.status = 'paid';
     tx.updatedAt = Date.now();
@@ -2377,8 +2421,12 @@ const App = {
     if (mode === 'fixed') {
       if (iconEl) iconEl.textContent = '🔄';
       const formattedAmount = this.formatDisplayValue(amount);
-      const totalAmount = this.formatDisplayValue(amount * count);
-      textEl.innerHTML = `Lançamento fixo de <strong>${formattedAmount}</strong> todo mês durante <strong>${count} meses</strong> (Total acumulado: ${totalAmount}).`;
+      if (amount === 0) {
+        textEl.innerHTML = `Lançamento fixo de <strong>R$ 0,00 (Variável)</strong> todo mês durante <strong>${count} meses</strong>.<br><span class="text-[10px] opacity-80">Ideal para contas como água, energia e mercado (você preenche o valor exato no mês em que a fatura chegar).</span>`;
+      } else {
+        const totalAmount = this.formatDisplayValue(amount * count);
+        textEl.innerHTML = `Lançamento fixo de <strong>${formattedAmount}</strong> todo mês durante <strong>${count} meses</strong> (Total acumulado: ${totalAmount}).`;
+      }
     } else {
       if (iconEl) iconEl.textContent = '💳';
       const partAmount = count > 0 ? Math.round((amount / count) * 100) / 100 : 0;
@@ -2405,7 +2453,7 @@ const App = {
     if (isNaN(repeatCount) || repeatCount < 2) repeatCount = 2;
     if (repeatCount > 60) repeatCount = 60;
 
-    if (!description || isNaN(amount) || amount <= 0 || !date) {
+    if (!description || isNaN(amount) || amount < 0 || !date) {
       Toast.show('Preencha os campos obrigatórios corretamente.', 'warning');
       return;
     }
@@ -2449,7 +2497,7 @@ const App = {
           }
           Toast.show(`${repeatCount} parcelas cadastradas com sucesso!`, 'success');
         } else {
-          // Conta Fixa Recorrente (mesmo valor integral todo mês)
+          // Conta Fixa Recorrente (mesmo valor todo mês)
           for (let i = 0; i < repeatCount; i++) {
             const repeatDate = Utils.addMonths(date, i);
             const newTx = {
@@ -2465,7 +2513,7 @@ const App = {
             };
             this.state.transactions.unshift(newTx);
           }
-          Toast.show(`Conta fixa repetida para os próximos ${repeatCount} meses!`, 'success');
+          Toast.show(amount === 0 ? `Conta variável criada para os próximos ${repeatCount} meses!` : `Conta fixa repetida para os próximos ${repeatCount} meses!`, 'success');
         }
       } else {
         const newTx = {
@@ -2539,7 +2587,22 @@ const App = {
     const tx = this.state.transactions.find(t => t.id === id);
     if (!tx) return;
 
-    tx.status = tx.status === 'paid' ? 'pending' : 'paid';
+    if (tx.status === 'pending') {
+      if (Number(tx.amount) === 0) {
+        const input = prompt(`A conta "${tx.description}" está com valor R$ 0,00 (variável).\nInforme o valor pago (ex: 85,50):`);
+        if (input === null) return; // cancelado
+        const parsed = parseFloat(input.replace(',', '.'));
+        if (isNaN(parsed) || parsed < 0) {
+          Toast.show('Valor inválido.', 'warning');
+          return;
+        }
+        tx.amount = parsed;
+      }
+      tx.status = 'paid';
+    } else {
+      tx.status = 'pending';
+    }
+
     tx.updatedAt = Date.now();
     this.saveAndSync();
     Toast.show(`Status: ${tx.status === 'paid' ? 'Pago' : 'Pendente'}`, 'info', 1800);
