@@ -184,7 +184,7 @@
           
           <!-- Sincronização na nuvem -->
           <button id="btn-sync" type="button" aria-label="Sincronização na nuvem" title="Sincronização desativada" class="relative p-2 rounded-lg text-slate-500 hover:text-blue-600 dark:text-slate-400 dark:hover:text-blue-400 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors">
-            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <svg id="sync-icon" class="w-5 h-5 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"/>
             </svg>
             <span id="sync-dot" class="absolute top-1.5 right-1.5 w-2 h-2 rounded-full bg-slate-400"></span>
@@ -1128,6 +1128,10 @@
               <a id="sync-gist-link" href="#" target="_blank" rel="noopener noreferrer" class="text-blue-600 dark:text-blue-400 hover:underline">
                 Ver Gist Privado no GitHub →
               </a>
+            </div>
+            <div class="mt-2.5 p-2 rounded-lg bg-emerald-50 dark:bg-emerald-950/30 text-emerald-700 dark:text-emerald-300 text-[11px] flex items-center gap-1.5 font-medium border border-emerald-200/50 dark:border-emerald-800/40">
+              <svg class="w-4 h-4 flex-shrink-0 text-emerald-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg>
+              <span>Sincronização automática ativa após cada modificação.</span>
             </div>
           </div>
           <div class="flex items-center justify-between pt-1">

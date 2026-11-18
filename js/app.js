@@ -20,8 +20,8 @@ const AUTO_LOCK_MINUTES = 15;                     // Bloqueio automático por in
 // Sincronização (GitHub Gist privado)
 const GIST_FILENAME = 'fincontrol-vault.json';
 const GIST_DESCRIPTION = 'FinControl - dados financeiros criptografados (nao editar)';
-const SYNC_DEBOUNCE_MS = 2500;                    // Aguarda edições em sequência antes de enviar
-const SYNC_INTERVAL_MS = 2 * 60 * 1000;           // Verificação periódica enquanto a aba está visível
+const SYNC_DEBOUNCE_MS = 300;                     // Resposta rápida após alterações
+const SYNC_INTERVAL_MS = 60 * 1000;                // Verificação periódica automática a cada 1 minuto
 const TOMBSTONE_TTL_DAYS = 180;                   // Por quanto tempo lembrar exclusões para sincronizar
 
 const CATEGORIES = [
@@ -447,8 +447,14 @@ const SyncService = {
       window.addEventListener('online', () => this.syncNow({ silent: true }));
       window.addEventListener('offline', () => this.isEnabled() && this.setStatus('offline'));
       document.addEventListener('visibilitychange', () => {
-        if (document.visibilityState === 'visible') this.syncNow({ silent: true });
+        if (document.visibilityState === 'visible') {
+          this.syncNow({ silent: true });
+        } else if (document.visibilityState === 'hidden') {
+          this.flushPending();
+        }
       });
+      window.addEventListener('pagehide', () => this.flushPending());
+      window.addEventListener('beforeunload', () => this.flushPending());
     }
     if (this.isEnabled()) {
       this.startInterval();
@@ -465,9 +471,14 @@ const SyncService = {
     }, SYNC_INTERVAL_MS);
   },
 
-  schedule() {
+  schedule(immediate = false) {
     if (!this.isEnabled()) return;
     clearTimeout(this.debounceTimer);
+    if (immediate) {
+      this.debounceTimer = null;
+      this.syncNow({ silent: true });
+      return;
+    }
     this.setStatus('pending');
     this.debounceTimer = setTimeout(() => {
       this.debounceTimer = null;
@@ -657,12 +668,12 @@ const SyncService = {
     this.statusDetail = detail;
 
     const labels = {
-      off: 'Sincronização desativada',
-      pending: 'Alterações aguardando envio...',
-      syncing: 'Sincronizando...',
-      ok: 'Sincronizado',
+      off: 'Sincronização desativada (toque para configurar)',
+      pending: 'Gravando alterações...',
+      syncing: 'Sincronizando com a nuvem...',
+      ok: 'Sincronizado na nuvem',
       error: 'Erro na sincronização',
-      offline: 'Sem conexão (sincroniza ao voltar)'
+      offline: 'Sem conexão (sincroniza ao reconectar)'
     };
     const dotColors = {
       off: 'bg-slate-400',
@@ -675,7 +686,7 @@ const SyncService = {
 
     let text = labels[status] || '';
     if (status === 'ok' && this.lastSync) {
-      text += ' às ' + this.lastSync.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+      text += ' às ' + this.lastSync.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
     }
     if (detail && (status === 'error' || status === 'offline')) text += ': ' + detail;
 
@@ -683,6 +694,14 @@ const SyncService = {
     if (dot) dot.className = `absolute top-1.5 right-1.5 w-2 h-2 rounded-full ${dotColors[status] || 'bg-slate-400'}`;
     const btn = document.getElementById('btn-sync');
     if (btn) btn.title = text;
+    const icon = document.getElementById('sync-icon');
+    if (icon) {
+      if (status === 'syncing') {
+        icon.classList.add('animate-pulse', 'text-blue-500');
+      } else {
+        icon.classList.remove('animate-pulse', 'text-blue-500');
+      }
+    }
     const statusText = document.getElementById('sync-status-text');
     if (statusText) statusText.textContent = text;
   }
@@ -2629,7 +2648,9 @@ const App = {
   saveAndSync() {
     StorageService.saveData(this.getPersistPayload());
     this.render();
-    SyncService.schedule();
+    if (SyncService.isEnabled()) {
+      SyncService.schedule(true); // Envio IMEDIATO à nuvem após cada modificação
+    }
   },
 
   // Orçamentos Modal
@@ -2912,7 +2933,14 @@ const App = {
     const enabled = SyncService.isEnabled();
     document.getElementById('sync-setup').classList.toggle('hidden', enabled);
     document.getElementById('sync-connected').classList.toggle('hidden', !enabled);
-    document.getElementById('sync-token').value = '';
+    
+    // Recupera token salvo anteriormente de localStorage ou cookies
+    let savedToken = localStorage.getItem('fincontrol_saved_gh_token') || '';
+    if (!savedToken) {
+      const match = document.cookie.match(/(?:^|;\s*)fincontrol_gh_token=([^;]+)/);
+      if (match) savedToken = decodeURIComponent(match[1]);
+    }
+    document.getElementById('sync-token').value = savedToken;
     document.getElementById('sync-password').value = '';
     document.getElementById('sync-overwrite').checked = false;
     document.getElementById('sync-error').classList.add('hidden');
@@ -2954,8 +2982,15 @@ const App = {
     SyncService.setStatus('syncing');
     try {
       await SyncService.connect(token, password, overwrite);
+      
+      // Salva token em localStorage e cookies para permanência no dispositivo
+      try {
+        localStorage.setItem('fincontrol_saved_gh_token', token);
+        document.cookie = `fincontrol_gh_token=${encodeURIComponent(token)}; max-age=31536000; path=/; SameSite=Strict`;
+      } catch (e) {}
+
       this.closeSyncModal();
-      Toast.show('Sincronização ativada com sucesso!', 'success', 6000);
+      Toast.show('Sincronização ativada! Cada modificação será salva na nuvem automaticamente.', 'success', 5000);
     } catch (err) {
       console.error(err);
       SyncService.setStatus(SyncService.isEnabled() ? 'error' : 'off', err.message);
@@ -2969,6 +3004,10 @@ const App = {
 
   async handleSyncDisconnect() {
     if (!confirm('Desativar a sincronização neste aparelho?')) return;
+    try {
+      localStorage.removeItem('fincontrol_saved_gh_token');
+      document.cookie = 'fincontrol_gh_token=; max-age=0; path=/';
+    } catch (e) {}
     await SyncService.disconnect();
     this.closeSyncModal();
     Toast.show('Sincronização desativada neste aparelho.', 'info');
