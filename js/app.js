@@ -17,6 +17,13 @@ const PBKDF2_ITERATIONS = 310000;                 // Recomendação OWASP para P
 const MIN_PASSWORD_LENGTH = 8;
 const AUTO_LOCK_MINUTES = 15;                     // Bloqueio automático por inatividade
 
+// Sincronização (GitHub Gist privado)
+const GIST_FILENAME = 'fincontrol-vault.json';
+const GIST_DESCRIPTION = 'FinControl - dados financeiros criptografados (nao editar)';
+const SYNC_DEBOUNCE_MS = 2500;                    // Aguarda edições em sequência antes de enviar
+const SYNC_INTERVAL_MS = 2 * 60 * 1000;           // Verificação periódica enquanto a aba está visível
+const TOMBSTONE_TTL_DAYS = 180;                   // Por quanto tempo lembrar exclusões para sincronizar
+
 const CATEGORIES = [
   { id: 'moradia', name: 'Moradia', icon: 'home', color: '#3b82f6' },
   { id: 'alimentacao', name: 'Alimentação', icon: 'utensils', color: '#f59e0b' },
@@ -113,7 +120,9 @@ const StorageService = {
     return {
       version: parsed.version || SCHEMA_VERSION,
       updatedAt: parsed.updatedAt || new Date().toISOString(),
-      transactions: parsed.transactions
+      transactions: parsed.transactions,
+      deleted: (parsed.deleted && typeof parsed.deleted === 'object') ? parsed.deleted : {},
+      settings: (parsed.settings && typeof parsed.settings === 'object') ? parsed.settings : {}
     };
   },
 
@@ -139,7 +148,9 @@ const StorageService = {
     const payload = {
       version: SCHEMA_VERSION,
       updatedAt: new Date().toISOString(),
-      transactions: Array.isArray(data.transactions) ? data.transactions : []
+      transactions: Array.isArray(data.transactions) ? data.transactions : [],
+      deleted: data.deleted || {},   // Exclusões (tombstones) para sincronização
+      settings: data.settings || {}  // Configurações locais (ex: sincronização)
     };
     this._queue = this._queue
       .then(() => CryptoVault.encryptAndStore(payload))
@@ -159,7 +170,9 @@ const StorageService = {
     return {
       version: SCHEMA_VERSION,
       updatedAt: new Date().toISOString(),
-      transactions: []
+      transactions: [],
+      deleted: {},
+      settings: {}
     };
   },
 
@@ -277,6 +290,19 @@ const CryptoVault = {
     return StorageService.normalize(data);
   },
 
+  // Decifra um cofre externo (ex: da nuvem) com a senha e passa a usar o salt/chave dele.
+  // Usado para que todos os aparelhos compartilhem o mesmo salt. Lança erro se a senha não abrir.
+  async adopt(password, vault) {
+    const salt = this.fromB64(vault.salt);
+    const iterations = vault.iterations || PBKDF2_ITERATIONS;
+    const key = await this.deriveKey(password, salt, iterations);
+    const data = await this.decryptVault(vault, key);
+    this.key = key;
+    this.salt = salt;
+    this.iterations = iterations;
+    return data;
+  },
+
   async verifyPassword(password) {
     try {
       const vault = this.readVault();
@@ -333,6 +359,12 @@ const AuthUI = {
     this.el('auth-form').addEventListener('submit', (e) => this.handleSubmit(e));
     this.el('auth-toggle-visibility').addEventListener('click', () => this.toggleVisibility());
     this.el('auth-forgot').addEventListener('click', () => this.handleForgot());
+    this.el('auth-restore-toggle').addEventListener('click', () => {
+      this.mode = this.mode === 'restore' ? 'setup' : 'restore';
+      this.clearError();
+      this.renderMode();
+      this.el(this.mode === 'restore' ? 'auth-token' : 'auth-password').focus();
+    });
 
     // Mensagem pós-bloqueio (ex: inatividade)
     const reason = sessionStorage.getItem(LOCK_REASON_KEY);
@@ -360,14 +392,30 @@ const AuthUI = {
 
   renderMode() {
     const isSetup = this.mode === 'setup';
-    this.el('auth-title').textContent = isSetup ? 'Crie sua senha de acesso' : 'Bem-vindo de volta';
-    this.el('auth-subtitle').textContent = isSetup
-      ? 'Seus dados financeiros serão criptografados com esta senha.'
-      : 'Digite sua senha para desbloquear seus dados.';
-    this.el('auth-submit-label').textContent = isSetup ? 'Criar senha e entrar' : 'Desbloquear';
+    const isRestore = this.mode === 'restore';
+    const titles = {
+      setup: 'Crie sua senha de acesso',
+      login: 'Bem-vindo de volta',
+      restore: 'Restaurar da nuvem'
+    };
+    const subtitles = {
+      setup: 'Seus dados financeiros serão criptografados com esta senha.',
+      login: 'Digite sua senha para desbloquear seus dados.',
+      restore: 'Informe seu token do GitHub e a mesma senha usada no outro aparelho.'
+    };
+    const labels = { setup: 'Criar senha e entrar', login: 'Desbloquear', restore: 'Restaurar e entrar' };
+
+    this.el('auth-title').textContent = titles[this.mode];
+    this.el('auth-subtitle').textContent = subtitles[this.mode];
+    this.el('auth-submit-label').textContent = labels[this.mode];
     this.el('auth-confirm-wrapper').classList.toggle('hidden', !isSetup);
+    this.el('auth-token-wrapper').classList.toggle('hidden', !isRestore);
     this.el('auth-setup-notice').classList.toggle('hidden', !isSetup);
-    this.el('auth-forgot').classList.toggle('hidden', isSetup);
+    this.el('auth-forgot').classList.toggle('hidden', this.mode !== 'login');
+    this.el('auth-restore-toggle').classList.toggle('hidden', this.mode === 'login');
+    this.el('auth-restore-toggle').textContent = isRestore
+      ? '← Criar uma nova senha neste aparelho'
+      : 'Já usa em outro aparelho? Restaurar da nuvem';
     this.el('auth-password').setAttribute('autocomplete', isSetup ? 'new-password' : 'current-password');
     this.el('auth-password-confirm').required = isSetup;
   },
@@ -414,6 +462,11 @@ const AuthUI = {
     this.clearError();
 
     const pwd = this.el('auth-password').value;
+
+    if (this.mode === 'restore') {
+      await this.handleRestore(pwd);
+      return;
+    }
 
     if (this.mode === 'setup') {
       const confirmPwd = this.el('auth-password-confirm').value;
@@ -470,6 +523,49 @@ const AuthUI = {
     }
   },
 
+  // Novo aparelho: baixa o cofre criptografado do Gist e abre com a senha
+  async handleRestore(pwd) {
+    const token = this.el('auth-token').value.trim();
+    if (!token) {
+      this.showError('Informe seu token do GitHub.');
+      return;
+    }
+    if (!pwd) {
+      this.showError('Digite a senha usada no outro aparelho.');
+      return;
+    }
+
+    this.setLoading(true);
+    try {
+      await GistAPI.validateToken(token);
+      const gistId = await GistAPI.findVaultGist(token);
+      const remoteRaw = gistId ? await GistAPI.readVault(token, gistId) : null;
+      if (!remoteRaw) {
+        throw new Error('Nenhum dado do FinControl encontrado nesta conta do GitHub. Ative a sincronização primeiro no outro aparelho.');
+      }
+
+      localStorage.setItem(VAULT_KEY, remoteRaw);
+      let data;
+      try {
+        data = await CryptoVault.unlock(pwd);
+      } catch (e) {
+        localStorage.removeItem(VAULT_KEY);
+        throw new Error(e.code === 'BAD_PASSWORD' ? 'Senha incorreta para os dados da nuvem.' : e.message);
+      }
+
+      data.settings = { ...(data.settings || {}), sync: { token, gistId } };
+      await StorageService.saveData(data);
+      StorageService.removeLegacyPlain();
+      this.el('auth-token').value = '';
+      this.onSuccess(data, 'Dados restaurados da nuvem! Sincronização ativada neste aparelho.');
+    } catch (err) {
+      console.error(err);
+      this.showError(err.message);
+    } finally {
+      this.setLoading(false);
+    }
+  },
+
   onSuccess(data, message) {
     this.el('auth-password').value = '';
     this.el('auth-password-confirm').value = '';
@@ -481,8 +577,9 @@ const AuthUI = {
   },
 
   // Bloqueia: aguarda gravações, descarta a chave e recarrega a página (limpa a memória)
-  async lock(reason) {
+  async lock(reason, opts = {}) {
     try {
+      if (!opts.skipSync) await SyncService.flushPending();
       await StorageService.flush();
     } finally {
       CryptoVault.lock();
@@ -517,6 +614,355 @@ const AuthUI = {
     StorageService.wipeAll();
     sessionStorage.setItem(LOCK_REASON_KEY, 'Dados apagados. Crie uma nova senha para começar.');
     location.reload();
+  }
+};
+
+/**
+ * Cliente mínimo da API de Gists do GitHub
+ */
+const GistAPI = {
+  async request(token, path, options = {}) {
+    let res;
+    try {
+      res = await fetch('https://api.github.com' + path, {
+        ...options,
+        cache: 'no-store',
+        headers: {
+          'Accept': 'application/vnd.github+json',
+          'Authorization': `Bearer ${token}`,
+          'X-GitHub-Api-Version': '2022-11-28',
+          ...(options.body ? { 'Content-Type': 'application/json' } : {})
+        }
+      });
+    } catch (e) {
+      const err = new Error('Sem conexão com a internet.');
+      err.status = 0;
+      throw err;
+    }
+
+    if (!res.ok) {
+      const messages = {
+        401: 'Token do GitHub inválido ou expirado.',
+        403: 'Token sem permissão de "gist" ou limite de requisições atingido.',
+        404: 'Gist de sincronização não encontrado (pode ter sido apagado).',
+        422: 'Requisição rejeitada pelo GitHub.'
+      };
+      const err = new Error(messages[res.status] || `Erro do GitHub (HTTP ${res.status}).`);
+      err.status = res.status;
+      throw err;
+    }
+    return res.status === 204 ? null : res.json();
+  },
+
+  validateToken(token) {
+    return this.request(token, '/user');
+  },
+
+  // Procura entre os gists do usuário aquele que contém o arquivo do cofre
+  async findVaultGist(token) {
+    for (let page = 1; page <= 10; page++) {
+      const list = await this.request(token, `/gists?per_page=100&page=${page}`);
+      const found = list.find(g => g.files && g.files[GIST_FILENAME]);
+      if (found) return found.id;
+      if (list.length < 100) break;
+    }
+    return null;
+  },
+
+  async readVault(token, gistId) {
+    const gist = await this.request(token, `/gists/${gistId}`);
+    const file = gist.files && gist.files[GIST_FILENAME];
+    if (!file) return null;
+    if (file.truncated && file.raw_url) {
+      const res = await fetch(file.raw_url, { cache: 'no-store' });
+      return res.text();
+    }
+    return file.content;
+  },
+
+  async createGist(token, content) {
+    const gist = await this.request(token, '/gists', {
+      method: 'POST',
+      body: JSON.stringify({
+        description: GIST_DESCRIPTION,
+        public: false,
+        files: { [GIST_FILENAME]: { content } }
+      })
+    });
+    return gist.id;
+  },
+
+  updateGist(token, gistId, content) {
+    return this.request(token, `/gists/${gistId}`, {
+      method: 'PATCH',
+      body: JSON.stringify({ files: { [GIST_FILENAME]: { content } } })
+    });
+  }
+};
+
+/**
+ * Serviço de Sincronização entre aparelhos
+ * - O conteúdo enviado ao Gist é o cofre JÁ CRIPTOGRAFADO (o GitHub não consegue ler os dados)
+ * - Mesclagem por lançamento: vence a versão com "updatedAt" mais recente;
+ *   exclusões são registradas (tombstones) para não "ressuscitarem" em outro aparelho
+ */
+const SyncService = {
+  status: 'off',       // off | pending | syncing | ok | error | offline
+  statusDetail: '',
+  lastSync: null,
+  debounceTimer: null,
+  intervalTimer: null,
+  chain: Promise.resolve(),
+  listenersBound: false,
+
+  get config() {
+    return (App.state.settings && App.state.settings.sync) || null;
+  },
+
+  isEnabled() {
+    const c = this.config;
+    return !!(c && c.token && c.gistId);
+  },
+
+  init() {
+    if (!this.listenersBound) {
+      this.listenersBound = true;
+      window.addEventListener('online', () => this.syncNow({ silent: true }));
+      window.addEventListener('offline', () => this.isEnabled() && this.setStatus('offline'));
+      document.addEventListener('visibilitychange', () => {
+        if (document.visibilityState === 'visible') this.syncNow({ silent: true });
+      });
+    }
+    if (this.isEnabled()) {
+      this.startInterval();
+      this.syncNow({ silent: true });
+    } else {
+      this.setStatus('off');
+    }
+  },
+
+  startInterval() {
+    clearInterval(this.intervalTimer);
+    this.intervalTimer = setInterval(() => {
+      if (document.visibilityState === 'visible') this.syncNow({ silent: true });
+    }, SYNC_INTERVAL_MS);
+  },
+
+  // Agenda uma sincronização após alterações locais
+  schedule() {
+    if (!this.isEnabled()) return;
+    clearTimeout(this.debounceTimer);
+    this.setStatus('pending');
+    this.debounceTimer = setTimeout(() => {
+      this.debounceTimer = null;
+      this.syncNow({ silent: true });
+    }, SYNC_DEBOUNCE_MS);
+  },
+
+  // Enfileira uma sincronização (nunca duas ao mesmo tempo)
+  syncNow(opts = {}) {
+    clearTimeout(this.debounceTimer);
+    this.debounceTimer = null;
+    this.chain = this.chain.then(() => this._sync(opts)).catch(() => {});
+    return this.chain;
+  },
+
+  // Antes de bloquear: envia alterações pendentes (com limite de tempo)
+  async flushPending(timeoutMs = 5000) {
+    if (!this.isEnabled()) return;
+    const pending = this.debounceTimer ? this.syncNow({ silent: true }) : this.chain;
+    await Promise.race([pending, new Promise(r => setTimeout(r, timeoutMs))]);
+  },
+
+  // Envia o cofre local sem mesclar (usado após troca de senha)
+  pushOnly() {
+    clearTimeout(this.debounceTimer);
+    this.debounceTimer = null;
+    this.chain = this.chain.then(async () => {
+      if (!this.isEnabled()) return;
+      this.setStatus('syncing');
+      try {
+        await StorageService.flush();
+        const { token, gistId } = this.config;
+        await GistAPI.updateGist(token, gistId, localStorage.getItem(VAULT_KEY));
+        this.lastSync = new Date();
+        this.setStatus('ok');
+      } catch (err) {
+        this.setStatus('error', err.message);
+        Toast.show('Falha ao enviar para a nuvem: ' + err.message, 'error');
+      }
+    }).catch(() => {});
+    return this.chain;
+  },
+
+  async _sync({ silent = false } = {}) {
+    if (!this.isEnabled()) return;
+    if (!navigator.onLine) {
+      this.setStatus('offline');
+      return;
+    }
+
+    this.setStatus('syncing');
+    const { token, gistId } = this.config;
+
+    try {
+      await StorageService.flush();
+      const remoteRaw = await GistAPI.readVault(token, gistId);
+
+      if (remoteRaw) {
+        const remoteVault = JSON.parse(remoteRaw);
+        let remoteData;
+        try {
+          remoteData = await CryptoVault.decryptVault(remoteVault, CryptoVault.key);
+        } catch (e) {
+          // A chave atual não abre a nuvem: a senha foi alterada em outro aparelho
+          localStorage.setItem(VAULT_KEY, remoteRaw);
+          await AuthUI.lock('A senha foi alterada em outro aparelho. Entre com a nova senha.', { skipSync: true });
+          return;
+        }
+
+        const local = App.getPersistPayload();
+        const remote = StorageService.normalize(remoteData);
+        const merged = this.merge(local, remote);
+        const mergedSig = this.signature(merged);
+
+        if (mergedSig !== this.signature(local)) {
+          App.applySyncedData(merged);
+          await StorageService.saveData(App.getPersistPayload());
+        }
+        if (mergedSig !== this.signature(remote)) {
+          await StorageService.flush();
+          await GistAPI.updateGist(token, gistId, localStorage.getItem(VAULT_KEY));
+        }
+      } else {
+        // Arquivo ausente no gist: envia o cofre local
+        await GistAPI.updateGist(token, gistId, localStorage.getItem(VAULT_KEY));
+      }
+
+      this.lastSync = new Date();
+      this.setStatus('ok');
+      if (!silent) Toast.show('Sincronizado com sucesso!', 'success', 2000);
+    } catch (err) {
+      console.error('Falha na sincronização:', err);
+      this.setStatus(err.status === 0 ? 'offline' : 'error', err.message);
+      if (!silent) Toast.show('Falha na sincronização: ' + err.message, 'error');
+    }
+  },
+
+  // Mescla dois conjuntos de dados (local e remoto)
+  merge(local, remote) {
+    const now = Date.now();
+    const ttl = TOMBSTONE_TTL_DAYS * 24 * 60 * 60 * 1000;
+
+    const deleted = {};
+    [remote.deleted || {}, local.deleted || {}].forEach(src => {
+      Object.entries(src).forEach(([id, ts]) => {
+        if (now - ts > ttl) return; // descarta exclusões muito antigas
+        deleted[id] = Math.max(deleted[id] || 0, ts);
+      });
+    });
+
+    const byId = new Map();
+    [...(remote.transactions || []), ...(local.transactions || [])].forEach(tx => {
+      const current = byId.get(tx.id);
+      if (!current || (tx.updatedAt || 0) > (current.updatedAt || 0)) byId.set(tx.id, tx);
+    });
+
+    const transactions = [...byId.values()].filter(tx => !(deleted[tx.id] && deleted[tx.id] >= (tx.updatedAt || 0)));
+    return { transactions, deleted };
+  },
+
+  // Assinatura simples para detectar se houve diferença
+  signature(data) {
+    const txs = (data.transactions || []).map(t => `${t.id}:${t.updatedAt || 0}`).sort().join('|');
+    const del = Object.keys(data.deleted || {}).sort().join('|');
+    return txs + '#' + del;
+  },
+
+  // Conecta este aparelho à nuvem (cria o gist ou mescla com o existente)
+  async connect(token, password, overwrite) {
+    if (!(await CryptoVault.verifyPassword(password))) {
+      throw new Error('Senha atual incorreta.');
+    }
+    await GistAPI.validateToken(token);
+    let gistId = await GistAPI.findVaultGist(token);
+    await StorageService.flush();
+
+    if (gistId) {
+      const remoteRaw = await GistAPI.readVault(token, gistId);
+      if (remoteRaw) {
+        let remoteData = null;
+        try {
+          remoteData = await CryptoVault.adopt(password, JSON.parse(remoteRaw));
+        } catch (e) {
+          if (!overwrite) {
+            throw new Error('Os dados da nuvem usam outra senha. Use neste aparelho a mesma senha do outro aparelho ou marque a opção de substituir os dados da nuvem.');
+          }
+        }
+        if (remoteData) {
+          App.applySyncedData(this.merge(App.getPersistPayload(), StorageService.normalize(remoteData)));
+        }
+      }
+    }
+
+    App.state.settings.sync = { token, gistId: gistId || null };
+    await StorageService.saveData(App.getPersistPayload());
+
+    if (!gistId) {
+      gistId = await GistAPI.createGist(token, localStorage.getItem(VAULT_KEY));
+      App.state.settings.sync.gistId = gistId;
+      await StorageService.saveData(App.getPersistPayload());
+    }
+    await StorageService.flush();
+    await GistAPI.updateGist(token, gistId, localStorage.getItem(VAULT_KEY));
+
+    App.render();
+    this.lastSync = new Date();
+    this.setStatus('ok');
+    this.startInterval();
+  },
+
+  async disconnect() {
+    clearTimeout(this.debounceTimer);
+    clearInterval(this.intervalTimer);
+    delete App.state.settings.sync;
+    await StorageService.saveData(App.getPersistPayload());
+    this.setStatus('off');
+  },
+
+  setStatus(status, detail = '') {
+    this.status = status;
+    this.statusDetail = detail;
+
+    const labels = {
+      off: 'Sincronização desativada',
+      pending: 'Alterações aguardando envio...',
+      syncing: 'Sincronizando...',
+      ok: 'Sincronizado',
+      error: 'Erro na sincronização',
+      offline: 'Sem conexão (sincroniza quando voltar)'
+    };
+    const dotColors = {
+      off: 'bg-slate-400',
+      pending: 'bg-amber-400',
+      syncing: 'bg-blue-500 status-pulse',
+      ok: 'bg-emerald-500',
+      error: 'bg-rose-500',
+      offline: 'bg-slate-500'
+    };
+
+    let text = labels[status] || '';
+    if (status === 'ok' && this.lastSync) {
+      text += ' às ' + this.lastSync.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+    }
+    if (detail && (status === 'error' || status === 'offline')) text += ': ' + detail;
+
+    const dot = document.getElementById('sync-dot');
+    if (dot) dot.className = `absolute top-1.5 right-1.5 w-2 h-2 rounded-full ${dotColors[status] || 'bg-slate-400'}`;
+    const btn = document.getElementById('btn-sync');
+    if (btn) btn.title = text;
+    const statusText = document.getElementById('sync-status-text');
+    if (statusText) statusText.textContent = text;
   }
 };
 
@@ -925,7 +1371,9 @@ const App = {
       search: ''
     },
     editingId: null,
-    deletingId: null
+    deletingId: null,
+    deleted: {},   // { idDoLançamento: timestampDaExclusão } - usado na sincronização
+    settings: {}   // Configurações (ex: sync) - salvas criptografadas
   },
 
   init() {
@@ -940,14 +1388,40 @@ const App = {
   // Chamado pelo AuthUI após desbloqueio bem-sucedido
   onUnlocked(data) {
     this.state.transactions = data.transactions || [];
+    this.state.deleted = data.deleted || {};
+    this.state.settings = data.settings || {};
     this.updateMonthSelector();
     this.render();
+    SyncService.init();
 
-    if (this.state.transactions.length === 0) {
+    if (this.state.transactions.length === 0 && !SyncService.isEnabled()) {
       setTimeout(() => {
         Toast.show('Bem-vindo! Clique em "Dados de Exemplo" para explorar a interface.', 'info', 5000);
       }, 700);
     }
+  },
+
+  // Dados completos a serem persistidos (criptografados)
+  getPersistPayload() {
+    return {
+      version: SCHEMA_VERSION,
+      transactions: this.state.transactions,
+      deleted: this.state.deleted,
+      settings: this.state.settings
+    };
+  },
+
+  // Aplica dados vindos da sincronização
+  applySyncedData(merged) {
+    this.state.transactions = merged.transactions;
+    this.state.deleted = merged.deleted;
+    this.render();
+  },
+
+  // Registra exclusões para que sejam propagadas aos outros aparelhos
+  markDeleted(ids) {
+    const now = Date.now();
+    ids.forEach(id => { this.state.deleted[id] = now; });
   },
 
   setupEventListeners() {
@@ -1069,6 +1543,13 @@ const App = {
     if (formPassword) formPassword.addEventListener('submit', (e) => this.handleChangePassword(e));
     if (btnCancelPassword) btnCancelPassword.addEventListener('click', () => this.closePasswordModal());
 
+    // Sincronização entre aparelhos
+    document.getElementById('btn-sync').addEventListener('click', () => this.openSyncModal());
+    document.getElementById('btn-close-sync').addEventListener('click', () => this.closeSyncModal());
+    document.getElementById('btn-sync-connect').addEventListener('click', () => this.handleSyncConnect());
+    document.getElementById('btn-sync-now').addEventListener('click', () => SyncService.syncNow({ silent: false }));
+    document.getElementById('btn-sync-disconnect').addEventListener('click', () => this.handleSyncDisconnect());
+
     // Modal de Confirmação de Exclusão
     const btnCancelDelete = document.getElementById('btn-cancel-delete');
     const btnConfirmDelete = document.getElementById('btn-confirm-delete');
@@ -1092,10 +1573,11 @@ const App = {
         this.closeDeleteModal();
         this.closeImportModal();
         this.closePasswordModal();
+        this.closeSyncModal();
       }
     });
 
-    ['modal-transaction', 'modal-delete', 'modal-import', 'modal-password'].forEach(id => {
+    ['modal-transaction', 'modal-delete', 'modal-import', 'modal-password', 'modal-sync'].forEach(id => {
       const el = document.getElementById(id);
       if (el) {
         el.addEventListener('click', (e) => {
@@ -1104,6 +1586,7 @@ const App = {
             this.closeDeleteModal();
             this.closeImportModal();
             this.closePasswordModal();
+            this.closeSyncModal();
           }
         });
       }
@@ -1445,7 +1928,8 @@ const App = {
           type,
           category,
           date,
-          status
+          status,
+          updatedAt: Date.now()
         };
         Toast.show('Lançamento atualizado com sucesso!', 'success');
       }
@@ -1458,7 +1942,8 @@ const App = {
         type,
         category,
         date,
-        status
+        status,
+        updatedAt: Date.now()
       };
       this.state.transactions.unshift(newTx);
       Toast.show('Lançamento cadastrado com sucesso!', 'success');
@@ -1509,6 +1994,7 @@ const App = {
   executeDelete() {
     if (!this.state.deletingId) return;
 
+    this.markDeleted([this.state.deletingId]);
     this.state.transactions = this.state.transactions.filter(t => t.id !== this.state.deletingId);
     this.saveAndSync();
     this.closeDeleteModal();
@@ -1520,6 +2006,7 @@ const App = {
     if (!tx) return;
 
     tx.status = tx.status === 'paid' ? 'pending' : 'paid';
+    tx.updatedAt = Date.now();
     this.saveAndSync();
     Toast.show(`Status alterado para "${tx.status === 'paid' ? 'Pago' : 'Pendente'}"`, 'info', 2000);
   },
@@ -1540,8 +2027,9 @@ const App = {
   },
 
   saveAndSync() {
-    StorageService.saveData({ transactions: this.state.transactions });
+    StorageService.saveData(this.getPersistPayload());
     this.render();
+    SyncService.schedule();
   },
 
   // =========================================================================
@@ -1657,7 +2145,8 @@ const App = {
             type: item.type === 'income' ? 'income' : 'expense',
             category: item.category || 'Outros',
             date: item.date || new Date().toISOString().split('T')[0],
-            status: item.status === 'pending' ? 'pending' : 'paid'
+            status: item.status === 'pending' ? 'pending' : 'paid',
+            updatedAt: Date.now()
           });
         }
 
@@ -1667,6 +2156,8 @@ const App = {
         }
 
         if (mode === 'replace') {
+          const importedIds = new Set(validTxs.map(t => t.id));
+          this.markDeleted(this.state.transactions.map(t => t.id).filter(id => !importedIds.has(id)));
           this.state.transactions = validTxs;
         } else {
           // Mesclar evitando IDs duplicados
@@ -1740,12 +2231,14 @@ const App = {
         return;
       }
       await CryptoVault.changePassword(newPwd, {
-        version: SCHEMA_VERSION,
-        updatedAt: new Date().toISOString(),
-        transactions: this.state.transactions
+        ...this.getPersistPayload(),
+        updatedAt: new Date().toISOString()
       });
+      SyncService.pushOnly(); // Envia o cofre com a nova senha para a nuvem
       this.closePasswordModal();
-      Toast.show('Senha alterada com sucesso!', 'success');
+      Toast.show(SyncService.isEnabled()
+        ? 'Senha alterada! Use a nova senha também nos outros aparelhos.'
+        : 'Senha alterada com sucesso!', 'success', 5000);
     } catch (err) {
       console.error(err);
       Toast.show('Erro ao alterar a senha: ' + err.message, 'error');
@@ -1755,18 +2248,93 @@ const App = {
   },
 
   loadSampleData() {
-    const samples = SampleData.generate(this.state.filters.month);
+    const now = Date.now();
+    const samples = SampleData.generate(this.state.filters.month).map(t => ({ ...t, updatedAt: now }));
+    this.markDeleted(this.state.transactions.map(t => t.id));
     this.state.transactions = samples;
     this.saveAndSync();
     Toast.show('Dados de exemplo carregados com sucesso!', 'success');
   },
 
   confirmClearAll() {
-    if (confirm('Tem certeza de que deseja apagar TODOS os lançamentos? Essa ação não pode ser desfeita sem um backup prévio.')) {
+    if (confirm('Tem certeza de que deseja apagar TODOS os lançamentos? Essa ação não pode ser desfeita sem um backup prévio.' +
+      (SyncService.isEnabled() ? '\n\nAtenção: a exclusão também será aplicada nos outros aparelhos sincronizados.' : ''))) {
+      this.markDeleted(this.state.transactions.map(t => t.id));
       this.state.transactions = [];
       this.saveAndSync();
       Toast.show('Todos os dados foram apagados.', 'info');
     }
+  },
+
+  // =========================================================================
+  // SINCRONIZAÇÃO (MODAL)
+  // =========================================================================
+
+  openSyncModal() {
+    const modal = document.getElementById('modal-sync');
+    const enabled = SyncService.isEnabled();
+    document.getElementById('sync-setup').classList.toggle('hidden', enabled);
+    document.getElementById('sync-connected').classList.toggle('hidden', !enabled);
+    document.getElementById('sync-token').value = '';
+    document.getElementById('sync-password').value = '';
+    document.getElementById('sync-overwrite').checked = false;
+    document.getElementById('sync-error').classList.add('hidden');
+
+    if (enabled) {
+      const link = document.getElementById('sync-gist-link');
+      link.href = `https://gist.github.com/${encodeURIComponent(SyncService.config.gistId)}`;
+    }
+    SyncService.setStatus(SyncService.status, SyncService.statusDetail);
+
+    modal.classList.remove('hidden');
+    modal.classList.add('flex');
+  },
+
+  closeSyncModal() {
+    const modal = document.getElementById('modal-sync');
+    if (modal) {
+      modal.classList.add('hidden');
+      modal.classList.remove('flex');
+    }
+  },
+
+  async handleSyncConnect() {
+    const token = document.getElementById('sync-token').value.trim();
+    const password = document.getElementById('sync-password').value;
+    const overwrite = document.getElementById('sync-overwrite').checked;
+    const errorEl = document.getElementById('sync-error');
+    const btn = document.getElementById('btn-sync-connect');
+
+    errorEl.classList.add('hidden');
+    if (!token || !password) {
+      errorEl.textContent = 'Informe o token do GitHub e sua senha atual.';
+      errorEl.classList.remove('hidden');
+      return;
+    }
+
+    btn.disabled = true;
+    btn.textContent = 'Conectando...';
+    SyncService.setStatus('syncing');
+    try {
+      await SyncService.connect(token, password, overwrite);
+      this.closeSyncModal();
+      Toast.show('Sincronização ativada! Agora entre no outro aparelho com "Restaurar da nuvem".', 'success', 6000);
+    } catch (err) {
+      console.error(err);
+      SyncService.setStatus(SyncService.isEnabled() ? 'error' : 'off', err.message);
+      errorEl.textContent = err.message;
+      errorEl.classList.remove('hidden');
+    } finally {
+      btn.disabled = false;
+      btn.textContent = 'Conectar e sincronizar';
+    }
+  },
+
+  async handleSyncDisconnect() {
+    if (!confirm('Desativar a sincronização NESTE aparelho?\n\nOs dados locais continuam aqui. Os dados na nuvem (Gist) não são apagados.')) return;
+    await SyncService.disconnect();
+    this.closeSyncModal();
+    Toast.show('Sincronização desativada neste aparelho.', 'info');
   }
 };
 

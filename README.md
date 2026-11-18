@@ -163,6 +163,33 @@ Pronto! Seu Controle Financeiro Pessoal estará publicado e pronto para uso em q
 - **Nenhum dado é enviado para servidores.** O GitHub Pages entrega apenas o código (HTML/CSS/JS), que é público. Seus lançamentos ficam no `localStorage` do seu navegador.
 - Cada navegador/dispositivo tem seus próprios dados. Para levar os dados para outro aparelho, use Exportar/Importar JSON.
 
+### Sincronização entre Aparelhos (Celular e Computador via GitHub Gist)
+
+Para acessar seus dados tanto no celular quanto no computador sem perder a privacidade:
+
+1. **Gere um Personal Access Token no GitHub:**
+   - Acesse: [github.com/settings/tokens/new?scopes=gist&description=FinControl](https://github.com/settings/tokens/new?scopes=gist&description=FinControl)
+   - Em **Note**, digite: `FinControl Sincronização`
+   - Em **Expiration**, selecione a validade desejada (ex: *No expiration* ou *90 days*)
+   - Em **Scopes**, certifique-se de que **apenas a opção `gist`** esteja marcada
+   - Clique em **Generate token** no final da página e copie o código gerado (`ghp_...`)
+
+2. **No primeiro aparelho (ex: Computador):**
+   - Acesse o site e desbloqueie com sua senha
+   - Clique no ícone de **Nuvem (Sincronização)** no cabeçalho
+   - Cole o token gerado e informe sua senha do app
+   - Clique em **Conectar e sincronizar**
+   - Seus dados serão enviados criptografados para um Gist Privado na sua conta
+
+3. **No segundo aparelho (ex: Celular):**
+   - Abra o site no navegador do celular
+   - Na tela inicial, toque em **"Já usa em outro aparelho? Restaurar da nuvem"**
+   - Cole o mesmo token do GitHub e digite a **mesma senha** cadastrada no primeiro aparelho
+   - Toque em **Restaurar e entrar**
+   - Pronto! O celular baixará os dados criptografados, descriptografará localmente e ativará a sincronização contínua
+
+> 🛡️ **Segurança:** O arquivo salvo no Gist está no formato cifrado (`AES-256-GCM`). Nem mesmo o GitHub tem acesso aos seus lançamentos financeiros.
+
 ---
 
 ## 📄 Licença
