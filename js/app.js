@@ -1041,7 +1041,42 @@ const AuthUI = {
     return document.getElementById(id);
   },
 
-  init() {
+  getSavedPassword() {
+    try {
+      let b64 = localStorage.getItem('fincontrol_auto_auth');
+      if (!b64) {
+        const match = document.cookie.match(/(?:^|;\s*)fincontrol_auto_auth=([^;]+)/);
+        if (match) b64 = decodeURIComponent(match[1]);
+      }
+      if (b64) {
+        return decodeURIComponent(atob(b64));
+      }
+    } catch (e) {
+      console.warn('Erro ao ler credencial salva:', e);
+    }
+    return null;
+  },
+
+  savePassword(pwd) {
+    try {
+      const b64 = btoa(encodeURIComponent(pwd));
+      localStorage.setItem('fincontrol_auto_auth', b64);
+      document.cookie = `fincontrol_auto_auth=${encodeURIComponent(b64)}; max-age=31536000; path=/; SameSite=Strict`;
+    } catch (e) {}
+  },
+
+  clearSavedPassword() {
+    try {
+      localStorage.removeItem('fincontrol_auto_auth');
+      document.cookie = 'fincontrol_auto_auth=; max-age=0; path=/';
+    } catch (e) {}
+  },
+
+  hasSavedPassword() {
+    return !!this.getSavedPassword();
+  },
+
+  async init() {
     this.el('auth-form').addEventListener('submit', (e) => this.handleSubmit(e));
     this.el('auth-toggle-visibility').addEventListener('click', () => this.toggleVisibility());
     this.el('auth-forgot').addEventListener('click', () => this.handleForgot());
@@ -1061,6 +1096,19 @@ const AuthUI = {
     }
 
     if (!this.isCryptoAvailable()) return;
+
+    // Se já houver senha salva para manter conectado, entra direto sem pedir senha!
+    const autoPwd = this.getSavedPassword();
+    if (autoPwd && CryptoVault.hasVault()) {
+      try {
+        const data = await CryptoVault.unlock(autoPwd);
+        this.onSuccess(data);
+        return;
+      } catch (err) {
+        console.warn('Auto-login falhou:', err);
+        this.clearSavedPassword();
+      }
+    }
 
     this.mode = CryptoVault.hasVault() ? 'login' : 'setup';
     this.renderMode();
@@ -1142,6 +1190,7 @@ const AuthUI = {
     this.clearError();
 
     const pwd = this.el('auth-password').value;
+    const remember = this.el('auth-remember')?.checked !== false;
 
     if (this.mode === 'restore') {
       await this.handleRestore(pwd);
@@ -1165,6 +1214,7 @@ const AuthUI = {
         const initial = legacy || StorageService.getDefaultData();
         await CryptoVault.create(pwd, initial);
         StorageService.removeLegacyPlain();
+        if (remember) this.savePassword(pwd);
         this.onSuccess(initial, 'Senha criada com sucesso!');
       } catch (err) {
         console.error(err);
@@ -1185,6 +1235,8 @@ const AuthUI = {
     try {
       const data = await CryptoVault.unlock(pwd);
       this.failedAttempts = 0;
+      if (remember) this.savePassword(pwd);
+      else this.clearSavedPassword();
       this.onSuccess(data);
     } catch (err) {
       this.failedAttempts++;
@@ -1199,6 +1251,7 @@ const AuthUI = {
 
   async handleRestore(pwd) {
     const token = this.el('auth-token').value.trim();
+    const remember = this.el('auth-remember')?.checked !== false;
     if (!token || !pwd) {
       this.showError('Informe o token do GitHub e a senha.');
       return;
@@ -1224,6 +1277,7 @@ const AuthUI = {
 
       data.settings = { ...(data.settings || {}), sync: { token, gistId } };
       await StorageService.saveData(data);
+      if (remember) this.savePassword(pwd);
       this.el('auth-token').value = '';
       this.onSuccess(data, 'Dados restaurados da nuvem com sucesso!');
     } catch (err) {
@@ -1256,6 +1310,9 @@ const AuthUI = {
   },
 
   startIdleWatch() {
+    // Se estiver configurado para manter conectado, não bloqueia por inatividade
+    if (this.hasSavedPassword()) return;
+
     const reset = () => {
       clearTimeout(this.idleTimer);
       this.idleTimer = setTimeout(() => {
@@ -1574,7 +1631,12 @@ const App = {
     document.getElementById('btn-clear-all')?.addEventListener('click', () => this.confirmClearAll());
 
     // Segurança
-    document.getElementById('btn-lock')?.addEventListener('click', () => AuthUI.lock('Sessão bloqueada.'));
+    document.getElementById('btn-lock')?.addEventListener('click', () => {
+      if (confirm('Deseja sair da sua conta e bloquear este aparelho?')) {
+        AuthUI.clearSavedPassword();
+        AuthUI.lock('Você saiu da sua conta.');
+      }
+    });
     document.getElementById('btn-change-password')?.addEventListener('click', () => this.openPasswordModal());
     document.getElementById('form-password')?.addEventListener('submit', (e) => this.handleChangePassword(e));
     document.getElementById('btn-cancel-password')?.addEventListener('click', () => this.closePasswordModal());
@@ -2896,6 +2958,7 @@ const App = {
         ...this.getPersistPayload(),
         updatedAt: new Date().toISOString()
       });
+      AuthUI.savePassword(newPwd);
       SyncService.pushOnly();
       this.closePasswordModal();
       Toast.show(SyncService.isEnabled()

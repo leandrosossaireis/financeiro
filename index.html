@@ -99,6 +99,14 @@
             <p class="text-[11px] text-slate-400 mt-1">Token do GitHub com permissão de <strong>gist</strong>.</p>
           </div>
 
+          <!-- Opção de Lembrar / Manter Conectado -->
+          <div class="flex items-center justify-between text-xs py-0.5">
+            <label class="flex items-center gap-2 cursor-pointer select-none text-slate-600 dark:text-slate-300">
+              <input type="checkbox" id="auth-remember" checked class="text-blue-600 rounded focus:ring-blue-500 w-4 h-4">
+              <span>Manter conectado neste aparelho</span>
+            </label>
+          </div>
+
           <div id="auth-error" role="alert" class="hidden text-xs px-3 py-2 rounded-xl bg-rose-50 dark:bg-rose-950/40 text-rose-700 dark:text-rose-300 border border-rose-200 dark:border-rose-900"></div>
 
           <button id="auth-submit" type="submit" class="w-full inline-flex items-center justify-center gap-2 px-4 py-2.5 text-sm font-semibold rounded-xl text-white bg-blue-600 hover:bg-blue-700 active:bg-blue-800 disabled:opacity-60 disabled:cursor-wait shadow-md shadow-blue-600/25 transition-all">
