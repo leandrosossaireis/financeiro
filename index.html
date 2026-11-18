@@ -6,6 +6,9 @@
   <title>FinControl - Controle Financeiro Pessoal</title>
   <meta name="description" content="Aplicação completa e segura de Controle Financeiro Pessoal, 100% client-side, sincronizada e criptografada de ponta a ponta.">
   <meta name="robots" content="noindex, nofollow">
+  <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+  <meta http-equiv="Pragma" content="no-cache">
+  <meta http-equiv="Expires" content="0">
   <meta name="theme-color" content="#0f172a">
   <meta name="mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-capable" content="yes">
@@ -58,7 +61,10 @@
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"/>
           </svg>
         </div>
-        <span class="text-2xl font-bold tracking-tight text-white">FinControl</span>
+        <div class="flex items-center gap-2">
+          <span class="text-2xl font-bold tracking-tight text-white">FinControl</span>
+          <span class="text-[10px] font-bold px-1.5 py-0.5 rounded bg-blue-500/20 text-blue-300 border border-blue-400/30">v2.2</span>
+        </div>
         <span class="text-xs text-slate-400">Controle Financeiro Pessoal</span>
       </div>
 
@@ -153,8 +159,8 @@
           <div>
             <div class="flex items-center gap-1.5">
               <span class="text-base sm:text-lg font-bold tracking-tight text-slate-900 dark:text-white">FinControl</span>
-              <span class="hidden md:inline-block text-[10px] font-semibold uppercase tracking-wider px-2 py-0.5 rounded-full bg-blue-100 dark:bg-blue-900/60 text-blue-700 dark:text-blue-300">
-                PWA
+              <span class="text-[10px] font-bold px-1.5 py-0.5 rounded bg-blue-100 dark:bg-blue-900/60 text-blue-700 dark:text-blue-300">
+                v2.2
               </span>
             </div>
             <p class="text-[11px] text-slate-500 dark:text-slate-400 hidden sm:block">Controle Financeiro</p>
@@ -1232,7 +1238,7 @@
   <!-- TOAST CONTAINER FLUTUANTE -->
   <div id="toast-container" class="fixed top-3 right-3 left-3 sm:left-auto sm:right-5 sm:bottom-5 sm:top-auto z-[70] flex flex-col gap-2 max-w-sm pointer-events-none"></div>
 
-  <!-- Scripts -->
-  <script src="js/app.js"></script>
+  <!-- Scripts com cache-busting -->
+  <script src="js/app.js?v=2.2.0"></script>
 </body>
 </html>
