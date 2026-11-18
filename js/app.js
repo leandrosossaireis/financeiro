@@ -1533,6 +1533,13 @@ const App = {
     document.getElementById('btn-close-modal')?.addEventListener('click', () => this.closeTransactionModal());
     document.getElementById('btn-cancel-modal')?.addEventListener('click', () => this.closeTransactionModal());
     document.getElementById('form-transaction')?.addEventListener('submit', (e) => this.handleTransactionSubmit(e));
+    document.getElementById('btn-delete-from-modal')?.addEventListener('click', () => {
+      const id = this.state.editingId;
+      if (id) {
+        this.closeTransactionModal();
+        this.openDeleteModal(id);
+      }
+    });
 
     // Checkbox de Repetição no Modal
     document.getElementById('tx-repeat-checkbox')?.addEventListener('change', (e) => {
@@ -2295,14 +2302,17 @@ const App = {
             </div>
           </div>
 
-          <div class="text-right flex items-center gap-3 flex-shrink-0">
+          <div class="text-right flex items-center gap-2 sm:gap-3 flex-shrink-0">
             <button type="button" onclick="App.openEditModal('${t.id}')" title="Clique para alterar valor ou detalhes desta conta" class="text-right text-xs sm:text-sm font-extrabold hover:underline ${Number(t.amount) === 0 ? 'text-amber-500' : (isPaid ? 'text-slate-500 line-through' : 'text-rose-600 dark:text-rose-400')}">
               ${Number(t.amount) === 0 ? 'R$ 0,00 <span class="text-[10px] font-normal text-amber-600 dark:text-amber-300 block sm:inline">(Variável)</span>' : this.formatDisplayValue(t.amount)}
             </button>
             ${actionButton}
-            <div class="flex items-center">
-              <button type="button" onclick="App.openEditModal('${t.id}')" title="Alterar valor ou detalhes desta conta" class="p-1 text-slate-400 hover:text-blue-600">
+            <div class="flex items-center gap-0.5">
+              <button type="button" onclick="App.openEditModal('${t.id}')" title="Editar valor ou detalhes desta conta" class="p-1.5 rounded-lg text-slate-400 hover:text-blue-600 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors">
                 <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z"/></svg>
+              </button>
+              <button type="button" onclick="App.openDeleteModal('${t.id}')" title="Excluir esta conta" class="p-1.5 rounded-lg text-slate-400 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/40 transition-colors">
+                <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/></svg>
               </button>
             </div>
           </div>
@@ -2416,6 +2426,26 @@ const App = {
     if (elHighName) elHighName.textContent = highest.description;
   },
 
+  getAllRelatedTransactions(tx) {
+    if (!tx) return [];
+    return this.state.transactions.filter(t => {
+      if (t.id === tx.id) return false;
+      // 1. Se possuem o mesmo groupId
+      if (tx.groupId && t.groupId && t.groupId === tx.groupId) {
+        return true;
+      }
+      // 2. Se for repetição de mesma descrição, tipo e categoria
+      const cleanDesc = (tx.description || '').replace(/\s*\(\d+\/\d+\)$/, '').trim().toLowerCase();
+      const tCleanDesc = (t.description || '').replace(/\s*\(\d+\/\d+\)$/, '').trim().toLowerCase();
+      return (
+        cleanDesc.length > 0 &&
+        cleanDesc === tCleanDesc &&
+        t.type === tx.type &&
+        t.category === tx.category
+      );
+    });
+  },
+
   getFutureRelatedTransactions(tx) {
     if (!tx || !tx.date) return [];
     return this.state.transactions.filter(t => {
@@ -2447,6 +2477,11 @@ const App = {
 
     form.reset();
     this.state.editingId = editId;
+
+    const btnDeleteFromModal = document.getElementById('btn-delete-from-modal');
+    if (btnDeleteFromModal) {
+      btnDeleteFromModal.classList.toggle('hidden', !editId);
+    }
 
     if (repeatWrapper) {
       repeatWrapper.classList.toggle('hidden', !!editId);
@@ -2722,15 +2757,30 @@ const App = {
     if (descEl) descEl.textContent = tx.description;
     if (valEl) valEl.textContent = Utils.formatCurrency(tx.amount);
 
+    const allRelated = this.getAllRelatedTransactions(tx);
     const futureRelated = this.getFutureRelatedTransactions(tx);
     const deleteScope = document.getElementById('delete-scope-wrapper');
+
     if (deleteScope) {
-      if (futureRelated.length > 0) {
+      if (allRelated.length > 0) {
         deleteScope.classList.remove('hidden');
+
+        const allLabel = document.getElementById('delete-scope-all-label');
+        if (allLabel) {
+          const totalCount = allRelated.length + 1;
+          allLabel.textContent = `Excluir TODAS as contas adicionadas (${totalCount} meses no total)`;
+        }
+
         const futureLabel = document.getElementById('delete-scope-future-label');
         if (futureLabel) {
-          futureLabel.textContent = `Excluir este e os próximos ${futureRelated.length} meses restantes`;
+          if (futureRelated.length > 0) {
+            futureLabel.textContent = `Excluir deste mês em diante (${futureRelated.length + 1} lançamentos)`;
+            futureLabel.closest('label')?.classList.remove('hidden');
+          } else {
+            futureLabel.closest('label')?.classList.add('hidden');
+          }
         }
+
         const singleRadio = document.querySelector('input[name="delete-scope"][value="single"]');
         if (singleRadio) singleRadio.checked = true;
       } else {
@@ -2760,16 +2810,22 @@ const App = {
     if (!tx) return;
 
     const deleteScope = document.querySelector('input[name="delete-scope"]:checked')?.value || 'single';
-    if (deleteScope === 'future') {
+    if (deleteScope === 'all') {
+      const allRelated = this.getAllRelatedTransactions(tx);
+      const idsToDelete = [tx.id, ...allRelated.map(t => t.id)];
+      this.markDeleted(idsToDelete);
+      this.state.transactions = this.state.transactions.filter(t => !idsToDelete.includes(t.id));
+      Toast.show(`Todas as ${idsToDelete.length} contas da série foram excluídas!`, 'info');
+    } else if (deleteScope === 'future') {
       const futureRelated = this.getFutureRelatedTransactions(tx);
       const idsToDelete = [tx.id, ...futureRelated.map(t => t.id)];
       this.markDeleted(idsToDelete);
       this.state.transactions = this.state.transactions.filter(t => !idsToDelete.includes(t.id));
-      Toast.show(`${idsToDelete.length} lançamentos excluídos!`, 'info');
+      Toast.show(`${idsToDelete.length} lançamentos excluídos (deste mês em diante)!`, 'info');
     } else {
       this.markDeleted([this.state.deletingId]);
       this.state.transactions = this.state.transactions.filter(t => t.id !== this.state.deletingId);
-      Toast.show('Lançamento excluído.', 'info');
+      Toast.show('Conta deste mês excluída com sucesso.', 'info');
     }
 
     this.saveAndSync();

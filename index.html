@@ -63,7 +63,7 @@
         </div>
         <div class="flex items-center gap-2">
           <span class="text-2xl font-bold tracking-tight text-white">FinControl</span>
-          <span class="text-[10px] font-bold px-1.5 py-0.5 rounded bg-blue-500/20 text-blue-300 border border-blue-400/30">v2.2</span>
+          <span class="text-[10px] font-bold px-1.5 py-0.5 rounded bg-blue-500/20 text-blue-300 border border-blue-400/30">v2.3</span>
         </div>
         <span class="text-xs text-slate-400">Controle Financeiro Pessoal</span>
       </div>
@@ -160,7 +160,7 @@
             <div class="flex items-center gap-1.5">
               <span class="text-base sm:text-lg font-bold tracking-tight text-slate-900 dark:text-white">FinControl</span>
               <span class="text-[10px] font-bold px-1.5 py-0.5 rounded bg-blue-100 dark:bg-blue-900/60 text-blue-700 dark:text-blue-300">
-                v2.2
+                v2.3
               </span>
             </div>
             <p class="text-[11px] text-slate-500 dark:text-slate-400 hidden sm:block">Controle Financeiro</p>
@@ -1003,13 +1003,18 @@
           </div>
         </div>
 
-        <div class="pt-3 border-t border-slate-200 dark:border-slate-800 flex items-center justify-end gap-2">
-          <button id="btn-cancel-modal" type="button" class="px-4 py-2 text-xs font-semibold rounded-xl text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800">
-            Cancelar
+        <div class="pt-3 border-t border-slate-200 dark:border-slate-800 flex items-center justify-between gap-2">
+          <button id="btn-delete-from-modal" type="button" class="hidden px-3 py-2 text-xs font-semibold rounded-xl text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/40 transition-colors">
+            🗑️ Excluir lançamento
           </button>
-          <button type="submit" class="px-5 py-2 text-xs font-semibold rounded-xl text-white bg-blue-600 hover:bg-blue-700 active:bg-blue-800 shadow-md shadow-blue-600/20">
-            Salvar
-          </button>
+          <div class="flex items-center gap-2 ml-auto">
+            <button id="btn-cancel-modal" type="button" class="px-4 py-2 text-xs font-semibold rounded-xl text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800">
+              Cancelar
+            </button>
+            <button type="submit" class="px-5 py-2 text-xs font-semibold rounded-xl text-white bg-blue-600 hover:bg-blue-700 active:bg-blue-800 shadow-md shadow-blue-600/20">
+              Salvar
+            </button>
+          </div>
         </div>
       </form>
     </div>
@@ -1068,22 +1073,36 @@
         <div id="delete-modal-amount" class="text-[11px] text-slate-400 mt-0.5">...</div>
       </div>
 
-      <!-- Opção de excluir apenas este ou futuros -->
-      <div id="delete-scope-wrapper" class="hidden mt-3 text-left space-y-1.5 text-xs">
-        <label class="flex items-start gap-2 p-2 rounded-lg bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 cursor-pointer">
-          <input type="radio" name="delete-scope" value="single" checked class="mt-0.5 text-rose-600 focus:ring-rose-500">
-          <div>
-            <div class="font-bold text-slate-800 dark:text-slate-200">Excluir SOMENTE este mês</div>
-            <div class="text-[10px] text-slate-400">Mantém os outros meses intactos.</div>
-          </div>
-        </label>
-        <label class="flex items-start gap-2 p-2 rounded-lg bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 cursor-pointer">
-          <input type="radio" name="delete-scope" value="future" class="mt-0.5 text-rose-600 focus:ring-rose-500">
-          <div>
-            <div class="font-bold text-slate-800 dark:text-slate-200" id="delete-scope-future-label">Excluir este e TODOS os futuros</div>
-            <div class="text-[10px] text-slate-400">Remove a conta deste mês e de todos os meses seguintes.</div>
-          </div>
-        </label>
+      <!-- Opção de excluir apenas este, todos ou futuros -->
+      <div id="delete-scope-wrapper" class="hidden mt-4 text-left space-y-2">
+        <span class="block text-[11px] font-semibold text-slate-700 dark:text-slate-300">
+          Esta conta possui repetições adicionadas. O que deseja apagar?
+        </span>
+        <div class="space-y-1.5 text-xs">
+          <label class="flex items-start gap-2.5 p-2 rounded-lg bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 cursor-pointer hover:border-rose-500 transition-colors">
+            <input type="radio" name="delete-scope" value="single" checked class="mt-0.5 text-rose-600 focus:ring-rose-500">
+            <div>
+              <div class="font-bold text-slate-800 dark:text-slate-200">Excluir SOMENTE deste mês</div>
+              <div class="text-[10px] text-slate-500 dark:text-slate-400">Remove apenas a conta deste período. Os outros meses permanecem intactos.</div>
+            </div>
+          </label>
+
+          <label class="flex items-start gap-2.5 p-2 rounded-lg bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 cursor-pointer hover:border-rose-500 transition-colors">
+            <input type="radio" name="delete-scope" value="all" class="mt-0.5 text-rose-600 focus:ring-rose-500">
+            <div>
+              <div class="font-bold text-slate-800 dark:text-slate-200" id="delete-scope-all-label">Excluir TODAS as contas adicionadas</div>
+              <div class="text-[10px] text-slate-500 dark:text-slate-400">Apaga completamente todas as repetições desta conta.</div>
+            </div>
+          </label>
+
+          <label class="flex items-start gap-2.5 p-2 rounded-lg bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 cursor-pointer hover:border-rose-500 transition-colors">
+            <input type="radio" name="delete-scope" value="future" class="mt-0.5 text-rose-600 focus:ring-rose-500">
+            <div>
+              <div class="font-bold text-slate-800 dark:text-slate-200" id="delete-scope-future-label">Excluir deste mês em diante (futuras)</div>
+              <div class="text-[10px] text-slate-500 dark:text-slate-400">Mantém o histórico já passado e cancela todos os meses futuros.</div>
+            </div>
+          </label>
+        </div>
       </div>
 
       <div class="mt-5 flex items-center justify-center gap-2">
@@ -1239,6 +1258,6 @@
   <div id="toast-container" class="fixed top-3 right-3 left-3 sm:left-auto sm:right-5 sm:bottom-5 sm:top-auto z-[70] flex flex-col gap-2 max-w-sm pointer-events-none"></div>
 
   <!-- Scripts com cache-busting -->
-  <script src="js/app.js?v=2.2.0"></script>
+  <script src="js/app.js?v=2.3.0"></script>
 </body>
 </html>
